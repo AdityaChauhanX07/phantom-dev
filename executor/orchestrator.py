@@ -5,7 +5,14 @@ Manages the full perception → plan → act → verify loop for a given goal.
 
 Loop per step:
   capture → get_next_action → execute_action → capture → verify_step
-  On verify failure: retry once; if still failing, mark step failed and continue.
+
+  On verify failure: 3-tier self-correction system:
+    TIER 1 — Retry same action (timing/slow UI): wait 2s, exact same action.
+    TIER 2 — Alternative path (missing element): fresh screenshot → Gemini
+              suggests a different approach → execute → verify.
+    TIER 3 — Human-in-the-loop: pause, ask user to unblock, then retry once.
+
+  All correction attempts are recorded in state["correction_history"].
 
 DRY_RUN = True  → actions are logged but not sent to pyautogui.
 DRY_RUN = False → actions are executed for real.
@@ -74,6 +81,21 @@ Return ONLY a JSON object — no markdown fences, no extra text:
 {{"success": <true|false>, "description": "<what visually changed between the two screenshots>", "confidence": <0.0-1.0>}}
 
 Be strict: "success" is true only if the screen change clearly matches the expected result.
+"""
+
+ALTERNATIVE_ACTION_PROMPT = """\
+You are a desktop automation agent. Look at the current screenshot.
+
+I tried to: {description}
+I expected: {expected_result}
+It failed because: {failure_description}
+
+Look at the current screen and suggest a completely different approach to achieve the same goal.
+
+Return ONLY a single JSON action object — no markdown fences, no extra text:
+{{"type": "click|type|key_combo|scroll|double_click|move|wait", "x": <int>, "y": <int>, "text": "<string>", "keys": ["<key>", ...], "direction": "up|down", "amount": <int>, "seconds": <float>, "confidence": <0.0-1.0>, "reason": "<why>"}}
+
+Include only the fields relevant to the chosen action type.
 """
 
 
@@ -149,6 +171,7 @@ class TaskOrchestrator:
             "status": "running",          # running | completed | failed | waiting_for_user
             "steps_completed": [],
             "steps_failed": [],
+            "correction_history": [],     # {"step": N, "tier": 1|2|3, "reason": "...", "success": bool}
             "current_step": None,
             "max_steps": 20,
             "step_count": 0,
@@ -315,6 +338,50 @@ class TaskOrchestrator:
         )
         return verdict
 
+    def get_alternative_action(
+        self,
+        screenshot_b64: str,
+        step: dict,
+        failure_description: str,
+    ) -> dict:
+        """
+        Ask Gemini for a completely different action when the primary approach failed.
+
+        Args:
+            screenshot_b64:      Base64 JPEG of the current screen.
+            step:                The step dict that failed.
+            failure_description: Human-readable reason the previous attempt failed.
+
+        Returns:
+            Flat action dict suitable for execute_action().
+
+        Raises:
+            ValueError: If Gemini's response cannot be parsed as a JSON object.
+        """
+        description = step.get("description", "")
+        expected_result = step.get("expected_result", "")
+        prompt = ALTERNATIVE_ACTION_PROMPT.format(
+            description=description,
+            expected_result=expected_result,
+            failure_description=failure_description,
+        )
+        logger.info(
+            "[get_alternative_action] Requesting alternative for step: %r  failure: %s",
+            description,
+            failure_description,
+        )
+
+        response = self._gemini_call([prompt, _inline_image(screenshot_b64)])
+
+        action = _extract_json(response.text, label="get_alternative_action")
+        if not isinstance(action, dict):
+            raise ValueError(
+                f"[get_alternative_action] Expected a JSON object, got {type(action).__name__}."
+            )
+
+        logger.info("[get_alternative_action] Alternative action: %s", json.dumps(action))
+        return action
+
     # ------------------------------------------------------------------ #
     # Main loop                                                            #
     # ------------------------------------------------------------------ #
@@ -365,23 +432,23 @@ class TaskOrchestrator:
                 step_num, len(steps), description,
             )
 
-            # Inner retry loop: attempt the step, retry once on verify failure
+            # ── Initial attempt ──────────────────────────────────────────
             success = False
-            for attempt in range(1, 3):   # attempts 1 and 2
-                if attempt > 1:
-                    logger.info("[run]   Retrying step %d (attempt %d)...", step_num, attempt)
+            last_failure = "unknown failure"  # updated as each attempt fails
 
-                # (a) Capture before screenshot
-                logger.info("[run]   Capturing before-screenshot...")
-                before_b64 = capture_frame_b64()
+            # (a) Capture before screenshot
+            logger.info("[run]   Capturing before-screenshot...")
+            before_b64 = capture_frame_b64()
 
-                # (b) Ask Gemini for the action to take
-                try:
-                    action = self.get_next_action(before_b64, step)
-                except (ValueError, Exception) as exc:
-                    logger.error("[run]   get_next_action failed: %s", exc)
-                    break   # skip to next step on planning failure
+            # (b) Ask Gemini for the action to take
+            try:
+                action = self.get_next_action(before_b64, step)
+            except (ValueError, Exception) as exc:
+                logger.error("[run]   get_next_action failed: %s", exc)
+                last_failure = str(exc)
+                action = None
 
+            if action is not None:
                 # (c) Execute (or dry-run) the action
                 if DRY_RUN:
                     logger.info("[run]   [DRY RUN] Would execute: %s", json.dumps(action))
@@ -396,40 +463,261 @@ class TaskOrchestrator:
                     exec_result = execute_action(action)
 
                 if not exec_result["success"]:
-                    logger.warning(
-                        "[run]   Action execution failed: %s", exec_result["error"]
-                    )
-                    break   # no point verifying if the action itself failed
-
-                # (d) Capture after screenshot
-                logger.info("[run]   Capturing after-screenshot...")
-                after_b64 = capture_frame_b64()
-
-                # (e) Verify the step outcome
-                try:
-                    verdict = self.verify_step(before_b64, after_b64, expected_result)
-                except (ValueError, Exception) as exc:
-                    logger.error("[run]   verify_step failed: %s", exc)
-                    verdict = {"success": False, "description": str(exc), "confidence": 0.0}
-
-                # (f) Check verdict
-                if verdict.get("success"):
-                    logger.info(
-                        "[run]   Step %d verified OK (confidence=%.2f): %s",
-                        step_num,
-                        verdict.get("confidence", 0.0),
-                        verdict.get("description", ""),
-                    )
-                    success = True
-                    break
+                    logger.warning("[run]   Action execution failed: %s", exec_result["error"])
+                    last_failure = exec_result["error"] or "action execution failed"
                 else:
-                    logger.warning(
-                        "[run]   Step %d verify FAILED (attempt %d, confidence=%.2f): %s",
-                        step_num,
-                        attempt,
-                        verdict.get("confidence", 0.0),
-                        verdict.get("description", ""),
-                    )
+                    # (d) Capture after screenshot and verify
+                    logger.info("[run]   Capturing after-screenshot...")
+                    after_b64 = capture_frame_b64()
+                    try:
+                        verdict = self.verify_step(before_b64, after_b64, expected_result)
+                    except (ValueError, Exception) as exc:
+                        logger.error("[run]   verify_step failed: %s", exc)
+                        verdict = {"success": False, "description": str(exc), "confidence": 0.0}
+
+                    if verdict.get("success"):
+                        logger.info(
+                            "[run]   Step %d verified OK (confidence=%.2f): %s",
+                            step_num,
+                            verdict.get("confidence", 0.0),
+                            verdict.get("description", ""),
+                        )
+                        success = True
+                    else:
+                        last_failure = verdict.get("description", "verify failed")
+                        logger.warning(
+                            "[run]   Step %d initial attempt FAILED (confidence=%.2f): %s",
+                            step_num,
+                            verdict.get("confidence", 0.0),
+                            last_failure,
+                        )
+
+            # ── TIER 1: wait 2s, retry same action ──────────────────────
+            if not success and action is not None:
+                logger.info(
+                    "[run]   [TIER 1] Step %d — waiting 2s then retrying same action...",
+                    step_num,
+                )
+                time.sleep(2)
+
+                logger.info("[run]   [TIER 1] Capturing before-screenshot...")
+                t1_before_b64 = capture_frame_b64()
+
+                if DRY_RUN:
+                    logger.info("[run]   [DRY RUN] [TIER 1] Would execute: %s", json.dumps(action))
+                    t1_exec = {
+                        "success": True,
+                        "action": action,
+                        "detail": {"dry_run": True},
+                        "error": None,
+                    }
+                else:
+                    logger.info("[run]   [TIER 1] Executing same action: %s", json.dumps(action))
+                    t1_exec = execute_action(action)
+
+                t1_success = False
+                t1_reason = last_failure
+                if not t1_exec["success"]:
+                    t1_reason = t1_exec["error"] or "tier-1 execution failed"
+                    logger.warning("[run]   [TIER 1] Execution failed: %s", t1_reason)
+                else:
+                    logger.info("[run]   [TIER 1] Capturing after-screenshot...")
+                    t1_after_b64 = capture_frame_b64()
+                    try:
+                        t1_verdict = self.verify_step(t1_before_b64, t1_after_b64, expected_result)
+                    except (ValueError, Exception) as exc:
+                        logger.error("[run]   [TIER 1] verify_step failed: %s", exc)
+                        t1_verdict = {"success": False, "description": str(exc), "confidence": 0.0}
+
+                    t1_success = t1_verdict.get("success", False)
+                    t1_reason = t1_verdict.get("description", "")
+                    if t1_success:
+                        logger.info(
+                            "[run]   [TIER 1] Step %d recovered (confidence=%.2f): %s",
+                            step_num, t1_verdict.get("confidence", 0.0), t1_reason,
+                        )
+                    else:
+                        logger.warning(
+                            "[run]   [TIER 1] Step %d still FAILED (confidence=%.2f): %s",
+                            step_num, t1_verdict.get("confidence", 0.0), t1_reason,
+                        )
+                        last_failure = t1_reason
+
+                self.state["correction_history"].append({
+                    "step": step_num,
+                    "tier": 1,
+                    "reason": f"Initial attempt failed: {last_failure}",
+                    "success": t1_success,
+                })
+                if t1_success:
+                    success = True
+
+            # ── TIER 2: alternative path via Gemini ──────────────────────
+            if not success:
+                logger.info(
+                    "[run]   [TIER 2] Step %d — asking Gemini for alternative approach...",
+                    step_num,
+                )
+                logger.info("[run]   [TIER 2] Capturing fresh screenshot...")
+                t2_before_b64 = capture_frame_b64()
+
+                try:
+                    t2_action = self.get_alternative_action(t2_before_b64, step, last_failure)
+                except (ValueError, Exception) as exc:
+                    logger.error("[run]   [TIER 2] get_alternative_action failed: %s", exc)
+                    t2_action = None
+
+                t2_success = False
+                t2_reason = last_failure
+                if t2_action is not None:
+                    if DRY_RUN:
+                        logger.info(
+                            "[run]   [DRY RUN] [TIER 2] Would execute: %s", json.dumps(t2_action)
+                        )
+                        t2_exec = {
+                            "success": True,
+                            "action": t2_action,
+                            "detail": {"dry_run": True},
+                            "error": None,
+                        }
+                    else:
+                        logger.info(
+                            "[run]   [TIER 2] Executing alternative action: %s",
+                            json.dumps(t2_action),
+                        )
+                        t2_exec = execute_action(t2_action)
+
+                    if not t2_exec["success"]:
+                        t2_reason = t2_exec["error"] or "tier-2 execution failed"
+                        logger.warning("[run]   [TIER 2] Execution failed: %s", t2_reason)
+                    else:
+                        logger.info("[run]   [TIER 2] Capturing after-screenshot...")
+                        t2_after_b64 = capture_frame_b64()
+                        try:
+                            t2_verdict = self.verify_step(
+                                t2_before_b64, t2_after_b64, expected_result
+                            )
+                        except (ValueError, Exception) as exc:
+                            logger.error("[run]   [TIER 2] verify_step failed: %s", exc)
+                            t2_verdict = {
+                                "success": False, "description": str(exc), "confidence": 0.0
+                            }
+
+                        t2_success = t2_verdict.get("success", False)
+                        t2_reason = t2_verdict.get("description", "")
+                        if t2_success:
+                            logger.info(
+                                "[run]   [TIER 2] Step %d recovered (confidence=%.2f): %s",
+                                step_num, t2_verdict.get("confidence", 0.0), t2_reason,
+                            )
+                        else:
+                            logger.warning(
+                                "[run]   [TIER 2] Step %d still FAILED (confidence=%.2f): %s",
+                                step_num, t2_verdict.get("confidence", 0.0), t2_reason,
+                            )
+                            last_failure = t2_reason
+
+                self.state["correction_history"].append({
+                    "step": step_num,
+                    "tier": 2,
+                    "reason": f"Tier-1 failed — tried alternative: {last_failure}",
+                    "success": t2_success,
+                })
+                if t2_success:
+                    success = True
+
+            # ── TIER 3: human in the loop ────────────────────────────────
+            if not success:
+                self.state["status"] = "waiting_for_user"
+                message = (
+                    f"I'm stuck on: {description}. "
+                    f"I tried twice and failed. "
+                    f"Can you help me get past this step, then press Enter to continue?"
+                )
+                logger.warning("[run]   [TIER 3] Step %d — escalating to user.", step_num)
+                print(f"\n[TIER 3 — HUMAN ASSIST] {message}")
+
+                try:
+                    import pyttsx3  # optional TTS — silent fallback if unavailable
+                    _tts = pyttsx3.init()
+                    _tts.say(message)
+                    _tts.runAndWait()
+                except Exception:
+                    pass  # TTS unavailable; printed message is sufficient
+
+                input()  # block until user presses Enter
+
+                self.state["status"] = "running"
+                logger.info("[run]   [TIER 3] User signalled ready. Retrying step %d...", step_num)
+
+                logger.info("[run]   [TIER 3] Capturing fresh screenshot...")
+                t3_before_b64 = capture_frame_b64()
+
+                try:
+                    t3_action = self.get_next_action(t3_before_b64, step)
+                except (ValueError, Exception) as exc:
+                    logger.error("[run]   [TIER 3] get_next_action failed: %s", exc)
+                    t3_action = None
+
+                t3_success = False
+                t3_reason = last_failure
+                if t3_action is not None:
+                    if DRY_RUN:
+                        logger.info(
+                            "[run]   [DRY RUN] [TIER 3] Would execute: %s", json.dumps(t3_action)
+                        )
+                        t3_exec = {
+                            "success": True,
+                            "action": t3_action,
+                            "detail": {"dry_run": True},
+                            "error": None,
+                        }
+                    else:
+                        logger.info(
+                            "[run]   [TIER 3] Executing action: %s", json.dumps(t3_action)
+                        )
+                        t3_exec = execute_action(t3_action)
+
+                    if not t3_exec["success"]:
+                        t3_reason = t3_exec["error"] or "tier-3 execution failed"
+                        logger.warning("[run]   [TIER 3] Execution failed: %s", t3_reason)
+                    else:
+                        logger.info("[run]   [TIER 3] Capturing after-screenshot...")
+                        t3_after_b64 = capture_frame_b64()
+                        try:
+                            t3_verdict = self.verify_step(
+                                t3_before_b64, t3_after_b64, expected_result
+                            )
+                        except (ValueError, Exception) as exc:
+                            logger.error("[run]   [TIER 3] verify_step failed: %s", exc)
+                            t3_verdict = {
+                                "success": False, "description": str(exc), "confidence": 0.0
+                            }
+
+                        t3_success = t3_verdict.get("success", False)
+                        t3_reason = t3_verdict.get("description", "")
+                        if t3_success:
+                            logger.info(
+                                "[run]   [TIER 3] Step %d recovered after user assist "
+                                "(confidence=%.2f): %s",
+                                step_num, t3_verdict.get("confidence", 0.0), t3_reason,
+                            )
+                        else:
+                            logger.warning(
+                                "[run]   [TIER 3] Step %d still FAILED after user assist "
+                                "(confidence=%.2f): %s",
+                                step_num, t3_verdict.get("confidence", 0.0), t3_reason,
+                            )
+
+                self.state["correction_history"].append({
+                    "step": step_num,
+                    "tier": 3,
+                    "reason": f"Tier-2 failed — required user assist: {t3_reason}",
+                    "success": t3_success,
+                })
+                # Regardless of outcome, continue to next step (as specified)
+                if t3_success:
+                    success = True
 
             # (g) Record outcome
             step_record = {
@@ -494,3 +782,9 @@ if __name__ == "__main__":
     print(f"\nFailed steps ({len(final_state['steps_failed'])}):")
     for s in final_state["steps_failed"]:
         print(f"  [ERR] Step {s['step']}: {s['description']}")
+    corrections = final_state.get("correction_history", [])
+    if corrections:
+        print(f"\nCorrection history ({len(corrections)} attempt(s)):")
+        for c in corrections:
+            status = "OK" if c["success"] else "FAIL"
+            print(f"  [TIER {c['tier']}][{status}] Step {c['step']}: {c['reason']}")
