@@ -27,6 +27,7 @@ from copy import deepcopy
 from capture import capture_frame_b64
 from executor import execute_action
 from gemini_client import GeminiClient
+from playbook_manager import PlaybookManager
 
 logger = logging.getLogger(__name__)
 
@@ -166,6 +167,8 @@ class TaskOrchestrator:
     def __init__(self, goal: str):
         self.goal = goal
         self.client = GeminiClient()
+        self.playbook_manager = PlaybookManager()
+        self.playbook: dict | None = None   # populated in run() if a match is found
         self.state: dict = {
             "goal": goal,
             "status": "running",          # running | completed | failed | waiting_for_user
@@ -250,6 +253,8 @@ class TaskOrchestrator:
             ValueError: If Gemini's response cannot be parsed as a JSON array.
         """
         prompt = DECOMPOSE_PROMPT.format(goal=self.goal)
+        if self.playbook:
+            prompt += "\n\n" + self.playbook_manager.format_for_prompt(self.playbook)
         logger.info("[decompose_goal] Sending goal + screenshot to Gemini...")
 
         response = self._gemini_call([prompt, _inline_image(screenshot_b64)])
@@ -396,6 +401,11 @@ class TaskOrchestrator:
         logger.info("=" * 60)
         logger.info("Starting task: %r  [DRY_RUN=%s]", self.goal, DRY_RUN)
         logger.info("=" * 60)
+
+        # ── Step 0: look up a matching playbook ──────────────────────────
+        self.playbook = self.playbook_manager.find(self.goal)
+        if self.playbook:
+            logger.info("[run] Found matching playbook — injecting into context.")
 
         # ── Step 1: initial screenshot + goal decomposition ──────────────
         logger.info("[run] Capturing initial screenshot...")
@@ -754,6 +764,10 @@ class TaskOrchestrator:
             len(self.state["steps_completed"]),
             len(self.state["steps_failed"]),
         )
+
+        # ── Step 4: persist a playbook if the task completed ─────────────
+        self.playbook_manager.save(self.state)
+
         return deepcopy(self.state)
 
 
