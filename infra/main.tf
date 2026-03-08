@@ -41,6 +41,12 @@ variable "gemini_api_key" {
   sensitive   = true
 }
 
+variable "gcs_bucket_name" {
+  description = "GCS bucket name for screenshot storage"
+  type        = string
+  default     = "phantom-dev-screenshots"
+}
+
 # ---------------------------------------------------------------------------
 # Cloud Run — Agent service
 # ---------------------------------------------------------------------------
@@ -88,6 +94,68 @@ resource "google_cloud_run_service_iam_member" "agent_public" {
 }
 
 # ---------------------------------------------------------------------------
+# Cloud Run — Voice Gateway service
+# ---------------------------------------------------------------------------
+
+resource "google_cloud_run_v2_service" "voice" {
+  name     = "phantom-dev-voice"
+  location = var.region
+
+  template {
+    containers {
+      image = "gcr.io/${var.gcp_project_id}/phantom-dev-voice:latest"
+
+      env {
+        name  = "GEMINI_API_KEY"
+        value = var.gemini_api_key
+      }
+
+      env {
+        name  = "GCP_PROJECT_ID"
+        value = var.gcp_project_id
+      }
+
+      env {
+        name  = "AGENT_URL"
+        value = google_cloud_run_v2_service.agent.uri
+      }
+
+      ports {
+        container_port = 8766
+      }
+
+      resources {
+        limits = {
+          cpu    = "1"
+          memory = "512Mi"
+        }
+      }
+    }
+  }
+
+  # TODO: restrict to VPC / authenticated callers in production
+}
+
+# Allow unauthenticated invocations (development only — restrict in prod)
+resource "google_cloud_run_service_iam_member" "voice_public" {
+  location = google_cloud_run_v2_service.voice.location
+  service  = google_cloud_run_v2_service.voice.name
+  role     = "roles/run.invoker"
+  member   = "allUsers"
+}
+
+# ---------------------------------------------------------------------------
+# GCS bucket — screenshot storage
+# ---------------------------------------------------------------------------
+
+resource "google_storage_bucket" "screenshots" {
+  name                        = var.gcs_bucket_name
+  location                    = "US"
+  force_destroy               = true
+  uniform_bucket_level_access = true
+}
+
+# ---------------------------------------------------------------------------
 # Firestore database
 # ---------------------------------------------------------------------------
 
@@ -105,4 +173,14 @@ resource "google_firestore_database" "default" {
 output "agent_url" {
   description = "Public URL of the Cloud Run agent service"
   value       = google_cloud_run_v2_service.agent.uri
+}
+
+output "voice_url" {
+  description = "Public URL of the Cloud Run voice gateway service"
+  value       = google_cloud_run_v2_service.voice.uri
+}
+
+output "screenshots_bucket" {
+  description = "GCS bucket name used for screenshot storage"
+  value       = google_storage_bucket.screenshots.name
 }
