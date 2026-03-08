@@ -14,6 +14,7 @@ DRY_RUN = False → actions are executed for real.
 import json
 import logging
 import re
+import time
 from copy import deepcopy
 
 from capture import capture_frame_b64
@@ -137,6 +138,9 @@ class TaskOrchestrator:
         print(final_state["status"])
     """
 
+    INTER_CALL_DELAY = 12   # seconds between Gemini calls — stays under 5 RPM free tier
+                            # Set to 0 when using Vertex AI (no rate limits)
+
     def __init__(self, goal: str):
         self.goal = goal
         self.client = GeminiClient()
@@ -150,6 +154,60 @@ class TaskOrchestrator:
             "step_count": 0,
         }
         logger.info("TaskOrchestrator initialised. Goal: %r", goal)
+
+    # ------------------------------------------------------------------ #
+    # Rate-limit-aware Gemini wrapper                                      #
+    # ------------------------------------------------------------------ #
+
+    def _gemini_call(self, contents: list) -> object:
+        """
+        Call Gemini with automatic rate-limit handling.
+
+        - On success: sleeps INTER_CALL_DELAY seconds before returning, so
+          the *next* call is naturally spaced out.
+        - On 429 / RESOURCE_EXHAUSTED: extracts the suggested retry delay from
+          the error message ("retry in Xs"), waits that long, then retries the
+          call exactly once. If the retry also fails the exception propagates.
+
+        Args:
+            contents: List passed as-is to generate_content().
+
+        Returns:
+            The GenerateContentResponse from the Gemini SDK.
+        """
+        def _do_call():
+            return self.client._client.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=contents,
+            )
+
+        def _is_rate_limit(exc: Exception) -> bool:
+            msg = str(exc)
+            return "429" in msg or "RESOURCE_EXHAUSTED" in msg
+
+        def _extract_retry_delay(exc: Exception) -> float:
+            """Parse 'retry in Xs' from the error message; default to 60 s."""
+            match = re.search(r"retry in\s+(\d+(?:\.\d+)?)\s*s", str(exc), re.IGNORECASE)
+            return float(match.group(1)) if match else 60.0
+
+        try:
+            response = _do_call()
+        except Exception as exc:
+            if _is_rate_limit(exc):
+                delay = _extract_retry_delay(exc)
+                logger.warning(
+                    "[_gemini_call] Rate limit hit. Waiting %.0f s before retry...", delay
+                )
+                time.sleep(delay)
+                logger.info("[_gemini_call] Retrying Gemini call...")
+                response = _do_call()   # let this propagate if it fails again
+            else:
+                raise
+
+        logger.debug("[_gemini_call] Call succeeded. Sleeping %d s (rate limit buffer)...",
+                     self.INTER_CALL_DELAY)
+        time.sleep(self.INTER_CALL_DELAY)
+        return response
 
     # ------------------------------------------------------------------ #
     # Core perception / planning methods                                   #
@@ -171,10 +229,7 @@ class TaskOrchestrator:
         prompt = DECOMPOSE_PROMPT.format(goal=self.goal)
         logger.info("[decompose_goal] Sending goal + screenshot to Gemini...")
 
-        response = self.client._client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=[prompt, _inline_image(screenshot_b64)],
-        )
+        response = self._gemini_call([prompt, _inline_image(screenshot_b64)])
 
         steps = _extract_json(response.text, label="decompose_goal")
         if not isinstance(steps, list):
@@ -206,10 +261,7 @@ class TaskOrchestrator:
         prompt = NEXT_ACTION_PROMPT.format(description=description)
         logger.info("[get_next_action] Requesting action for step: %r", description)
 
-        response = self.client._client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=[prompt, _inline_image(screenshot_b64)],
-        )
+        response = self._gemini_call([prompt, _inline_image(screenshot_b64)])
 
         action = _extract_json(response.text, label="get_next_action")
         if not isinstance(action, dict):
@@ -243,16 +295,13 @@ class TaskOrchestrator:
         prompt = VERIFY_PROMPT.format(expected_result=expected_result)
         logger.info("[verify_step] Verifying expected result: %r", expected_result)
 
-        response = self.client._client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=[
-                prompt,
-                "BEFORE screenshot:",
-                _inline_image(before_b64),
-                "AFTER screenshot:",
-                _inline_image(after_b64),
-            ],
-        )
+        response = self._gemini_call([
+            prompt,
+            "BEFORE screenshot:",
+            _inline_image(before_b64),
+            "AFTER screenshot:",
+            _inline_image(after_b64),
+        ])
 
         verdict = _extract_json(response.text, label="verify_step")
         if not isinstance(verdict, dict):
