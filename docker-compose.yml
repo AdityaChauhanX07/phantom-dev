@@ -1,0 +1,70 @@
+version: "3.9"
+
+services:
+  # ── Agent (FastAPI + Gemini) ──────────────────────────────────────────────
+  agent:
+    build:
+      context: ./agent
+      dockerfile: Dockerfile          # TODO: add agent/Dockerfile
+    image: phantom-dev-agent:local
+    container_name: phantom_agent
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"                   # HTTP / REST
+      - "8765:8765"                   # WebSocket (if running separately)
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - phantom_net
+
+  # ── Executor (local screen capture + action runner) ───────────────────────
+  executor:
+    build:
+      context: ./executor
+      dockerfile: Dockerfile          # TODO: add executor/Dockerfile
+    image: phantom-dev-executor:local
+    container_name: phantom_executor
+    env_file:
+      - .env
+    environment:
+      - AGENT_URL=http://agent:8000
+    # Mount the host display for GUI automation (Linux)
+    # volumes:
+    #   - /tmp/.X11-unix:/tmp/.X11-unix
+    # environment:
+    #   - DISPLAY=${DISPLAY}
+    depends_on:
+      agent:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - phantom_net
+
+  # ── Voice Gateway (Gemini Live API bridge) ───────────────────────────────
+  voice:
+    build:
+      context: ./voice
+      dockerfile: Dockerfile          # TODO: add voice/Dockerfile
+    image: phantom-dev-voice:local
+    container_name: phantom_voice
+    env_file:
+      - .env
+    ports:
+      - "8766:8766"                   # WebSocket audio stream
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8766/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - phantom_net
+
+networks:
+  phantom_net:
+    driver: bridge
