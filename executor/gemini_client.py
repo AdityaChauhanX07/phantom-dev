@@ -86,13 +86,31 @@ class GeminiClient:
     """
 
     def __init__(self, api_key: Optional[str] = None):
-        key = api_key or os.getenv("GEMINI_API_KEY")
-        if not key:
-            raise EnvironmentError(
-                "GEMINI_API_KEY is not set. Add it to your .env file or pass it explicitly."
+        project  = os.getenv("GCP_PROJECT_ID")
+        location = os.getenv("GCP_LOCATION", "us-central1")
+
+        if project:
+            self._client = genai.Client(
+                vertexai=True,
+                project=project,
+                location=location,
             )
-        self._client = genai.Client(api_key=key)
-        logger.info("GeminiClient initialised with model %s", MODEL)
+            logger.info(
+                "GeminiClient initialised with Vertex AI — project=%s location=%s model=%s",
+                project, location, MODEL,
+            )
+        else:
+            key = api_key or os.getenv("GEMINI_API_KEY")
+            if not key:
+                raise EnvironmentError(
+                    "Neither GCP_PROJECT_ID nor GEMINI_API_KEY is set. "
+                    "Add one to your .env file."
+                )
+            logger.warning(
+                "GeminiClient falling back to AI Studio key — rate limits apply."
+            )
+            self._client = genai.Client(api_key=key)
+            logger.info("GeminiClient initialised with model %s", MODEL)
 
     # ------------------------------------------------------------------ #
     # Public API                                                           #
