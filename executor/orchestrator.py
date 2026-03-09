@@ -42,6 +42,10 @@ You are a desktop automation planner. The user wants to accomplish this goal:
 
   "{goal}"
 
+IMPORTANT: Before planning any steps, check the current screen state carefully.
+If an application is already open and visible on screen, do NOT include a step
+to open it. Start from the current screen state and work forward from there.
+
 Look at the current screenshot and break the goal into ordered, atomic sub-steps.
 Return ONLY a JSON array — no markdown fences, no extra text:
 
@@ -161,8 +165,7 @@ class TaskOrchestrator:
         print(final_state["status"])
     """
 
-    INTER_CALL_DELAY = 12   # seconds between Gemini calls — stays under 5 RPM free tier
-                            # Set to 0 when using Vertex AI (no rate limits)
+    INTER_CALL_DELAY = 0    # 0 = no delay (Vertex AI has no RPM cap)
 
     def __init__(self, goal: str):
         self.goal = goal
@@ -230,9 +233,6 @@ class TaskOrchestrator:
             else:
                 raise
 
-        logger.debug("[_gemini_call] Call succeeded. Sleeping %d s (rate limit buffer)...",
-                     self.INTER_CALL_DELAY)
-        time.sleep(self.INTER_CALL_DELAY)
         return response
 
     # ------------------------------------------------------------------ #
