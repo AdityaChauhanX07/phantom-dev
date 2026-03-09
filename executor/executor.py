@@ -75,14 +75,18 @@ def _handle_click(action: dict) -> dict:
     x, y = action["x"], action["y"]
     _check_bounds(x, y)
     button = action.get("button", "left")
-    pyautogui.click(x=x, y=y, button=button)
+    pyautogui.moveTo(x, y, duration=0.2)
+    time.sleep(0.1)
+    pyautogui.click(x, y, button=button)
     return {"x": x, "y": y, "button": button}
 
 
 def _handle_double_click(action: dict) -> dict:
     x, y = action["x"], action["y"]
     _check_bounds(x, y)
-    pyautogui.doubleClick(x=x, y=y)
+    pyautogui.moveTo(x, y, duration=0.2)
+    time.sleep(0.1)
+    pyautogui.doubleClick(x, y)
     return {"x": x, "y": y}
 
 
