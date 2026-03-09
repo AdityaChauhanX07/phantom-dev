@@ -75,17 +75,19 @@ Set "confidence" to reflect how certain you are about the coordinates/target.
 """
 
 VERIFY_PROMPT = """\
-You are a desktop automation verifier. Compare the two screenshots:
-  - BEFORE: the state before the action was taken.
-  - AFTER:  the state after the action was taken.
+You are a desktop automation verifier.
 
-The expected result was:
+Look ONLY at the AFTER screenshot. Is the expected result currently visible \
+and true on screen? Do not require a visual change — the state may have already \
+been achieved. Answer based solely on what you see in the AFTER screenshot.
+
+The expected result is:
   "{expected_result}"
 
 Return ONLY a JSON object — no markdown fences, no extra text:
-{{"success": <true|false>, "description": "<what visually changed between the two screenshots>", "confidence": <0.0-1.0>}}
+{{"success": <true|false>, "description": "<what you see in the AFTER screenshot relevant to the expected result>", "confidence": <0.0-1.0>}}
 
-Be strict: "success" is true only if the screen change clearly matches the expected result.
+"success" is true if the expected result is currently present on screen, regardless of whether it changed.
 """
 
 ALTERNATIVE_ACTION_PROMPT = """\
