@@ -173,33 +173,64 @@
   }
 
   function startRecording(stream) {
-    mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
-
-    mediaRecorder.ondataavailable = (e) => {
-      if (e.data.size > 0 && ws.readyState === WebSocket.OPEN && sessionReady) {
-        e.data.arrayBuffer().then(buf => ws.send(buf));
+    // Use Web Audio API to convert to PCM format (16-bit, 16kHz, mono)
+    if (!audioContext) audioContext = new AudioContext({ sampleRate: 16000 });
+    
+    const source = audioContext.createMediaStreamSource(stream);
+    const processor = audioContext.createScriptProcessor(4096, 1, 1);
+    
+    let chunkCount = 0;
+    processor.onaudioprocess = (e) => {
+      if (!sessionReady || ws.readyState !== WebSocket.OPEN) return;
+      
+      const inputData = e.inputBuffer.getChannelData(0);
+      // Convert Float32Array to Int16Array (16-bit PCM)
+      const pcmData = new Int16Array(inputData.length);
+      for (let i = 0; i < inputData.length; i++) {
+        // Clamp to [-1, 1] and convert to 16-bit integer
+        const s = Math.max(-1, Math.min(1, inputData[i]));
+        pcmData[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+      }
+      ws.send(pcmData.buffer);
+      chunkCount++;
+      if (chunkCount % 20 === 0) { // Log every 20 chunks (~1 second)
+        log(`Sent ${chunkCount} audio chunks (${pcmData.buffer.byteLength} bytes each)`, 'ev-info');
       }
     };
-
-    mediaRecorder.onstop = () => {
+    
+    source.connect(processor);
+    processor.connect(audioContext.destination);
+    
+    // Store processor for cleanup
+    mediaRecorder = { processor, source, stream, stop: () => {
+      processor.disconnect();
+      source.disconnect();
       stream.getTracks().forEach(t => t.stop());
+      // Signal to server that user finished speaking
+      if (ws.readyState === WebSocket.OPEN && sessionReady) {
+        log('Sending stop signal to server...', 'ev-info');
+        ws.send(JSON.stringify({ type: 'stop' }));
+        log('Stop signal sent', 'ev-status');
+      } else {
+        log('Cannot send stop: ws=' + ws.readyState + ', sessionReady=' + sessionReady, 'ev-error');
+      }
       labelEl.textContent = 'Press to talk';
       micBtn.disabled = false;
       log('Recording stopped — waiting for Gemini…', 'ev-info');
-    };
+    }};
 
-    mediaRecorder.start(250);
     micBtn.classList.add('active');
     labelEl.textContent = 'Recording… click to stop';
     log('Recording started', 'ev-info');
   }
 
   micBtn.addEventListener('click', async () => {
-    if (mediaRecorder && mediaRecorder.state === 'recording') {
+    if (mediaRecorder && mediaRecorder.stop) {
       mediaRecorder.stop();
       micBtn.classList.remove('active');
       labelEl.textContent = 'Processing…';
       micBtn.disabled = true;
+      mediaRecorder = null;
       return;
     }
 
