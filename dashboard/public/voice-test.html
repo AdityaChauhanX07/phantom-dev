@@ -78,6 +78,7 @@
 
 <script>
   const VOICE_WS = 'wss://phantom-voice-874381233509.us-central1.run.app/stream';
+  const STT_HTTP = 'https://phantom-voice-874381233509.us-central1.run.app/stt-task';
 
   const statusEl = document.getElementById('status');
   const micBtn = document.getElementById('mic-btn');
@@ -85,7 +86,7 @@
   const logEl = document.getElementById('log');
 
   let ws = null;
-  let mediaRecorder = null;
+  let mediaRecorder = null;           // PCM stream + STT recorder bundle
   let sessionStarted = false;
   let sessionReady = false;  // True when session_started event received
   let audioContext = null;
@@ -104,20 +105,24 @@
     ws.binaryType = 'arraybuffer';
 
     ws.onopen = () => {
-      statusEl.textContent = 'Connected';
+      statusEl.textContent = 'Connected — ready to listen';
       statusEl.className = 'connected';
       micBtn.disabled = false;
-      log('WebSocket connected', 'ev-status');
+      labelEl.textContent = 'Press mic and say “Hey Phantom, [your task]”';
+      log('WebSocket connected to voice gateway', 'ev-status');
     };
 
     ws.onclose = () => {
       statusEl.textContent = 'Disconnected — reload to retry';
       statusEl.className = 'error';
       micBtn.disabled = true;
-      log('WebSocket disconnected', 'ev-error');
+      labelEl.textContent = 'Connection lost. Reload the page.';
+      log('WebSocket disconnected from voice gateway', 'ev-error');
     };
 
-    ws.onerror = () => log('WebSocket error', 'ev-error');
+    ws.onerror = (e) => {
+      log('WebSocket error — check Phantom Voice service / network', 'ev-error');
+    };
 
     ws.onmessage = async (ev) => {
       if (ev.data instanceof ArrayBuffer) {
@@ -172,13 +177,52 @@
     }
   }
 
+  // ── Helper: send recorded audio to /stt-task via HTTP ─────────────────────
+
+  async function sendSttTask(blob) {
+    try {
+      log('Sending audio to STT /stt-task…', 'ev-info');
+      const res = await fetch(STT_HTTP, {
+        method: 'POST',
+        headers: {
+          'Content-Type': blob.type || 'audio/webm',
+        },
+        body: blob,
+      });
+
+      const text = await res.text();
+      let data = null;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        log('STT raw response (non-JSON): ' + text, 'ev-error');
+        return;
+      }
+
+      if (!res.ok) {
+        log('STT error from /stt-task: ' + (data.message || res.status), 'ev-error');
+        return;
+      }
+
+      const goal = data.goal || '(no goal)';
+      const taskId = data.task_id || '(no task_id)';
+      log(`HTTP TASK DETECTED: ${goal} (task_id=${taskId})`, 'ev-task');
+      labelEl.textContent = 'Task sent to agent!';
+    } catch (e) {
+      log('STT request failed (network or CORS): ' + e.message, 'ev-error');
+      statusEl.textContent = 'Error talking to STT service';
+      statusEl.className = 'error';
+    }
+  }
+
   function startRecording(stream) {
     // Use Web Audio API to convert to PCM format (16-bit, 16kHz, mono)
     if (!audioContext) audioContext = new AudioContext({ sampleRate: 16000 });
     
     const source = audioContext.createMediaStreamSource(stream);
     const processor = audioContext.createScriptProcessor(4096, 1, 1);
-    
+
+    // ── Live PCM → WebSocket (for Live API) ────────────────────────────────
     let chunkCount = 0;
     processor.onaudioprocess = (e) => {
       if (!sessionReady || ws.readyState !== WebSocket.OPEN) return;
@@ -197,27 +241,65 @@
         log(`Sent ${chunkCount} audio chunks (${pcmData.buffer.byteLength} bytes each)`, 'ev-info');
       }
     };
-    
+
     source.connect(processor);
     processor.connect(audioContext.destination);
-    
-    // Store processor for cleanup
-    mediaRecorder = { processor, source, stream, stop: () => {
-      processor.disconnect();
-      source.disconnect();
-      stream.getTracks().forEach(t => t.stop());
-      // Signal to server that user finished speaking
-      if (ws.readyState === WebSocket.OPEN && sessionReady) {
-        log('Sending stop signal to server...', 'ev-info');
-        ws.send(JSON.stringify({ type: 'stop' }));
-        log('Stop signal sent', 'ev-status');
-      } else {
-        log('Cannot send stop: ws=' + ws.readyState + ', sessionReady=' + sessionReady, 'ev-error');
-      }
-      labelEl.textContent = 'Press to talk';
-      micBtn.disabled = false;
-      log('Recording stopped — waiting for Gemini…', 'ev-info');
-    }};
+
+    // ── Parallel STT recording (MediaRecorder → /stt-task) ────────────────
+    let sttChunks = [];
+    let sttRecorder = null;
+    try {
+      sttRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+    } catch (e) {
+      log('MediaRecorder not available for STT: ' + e.message, 'ev-error');
+    }
+
+    if (sttRecorder) {
+      sttRecorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) sttChunks.push(e.data);
+      };
+      sttRecorder.onstop = () => {
+        if (!sttChunks.length) {
+          log('No STT audio chunks captured', 'ev-error');
+          return;
+        }
+        const blob = new Blob(sttChunks, { type: 'audio/webm' });
+        // Fire and forget; errors are logged inside sendSttTask
+        void sendSttTask(blob);
+      };
+      sttRecorder.start(250);
+      log('STT recorder started (audio/webm)', 'ev-info');
+    }
+
+    // Store for cleanup
+    mediaRecorder = {
+      processor,
+      source,
+      stream,
+      sttRecorder,
+      stop: () => {
+        processor.disconnect();
+        source.disconnect();
+        stream.getTracks().forEach(t => t.stop());
+
+        if (sttRecorder && sttRecorder.state !== 'inactive') {
+          sttRecorder.stop();
+        }
+
+        // Signal to server that user finished speaking
+        if (ws.readyState === WebSocket.OPEN && sessionReady) {
+          log('Sending stop signal to server...', 'ev-info');
+          ws.send(JSON.stringify({ type: 'stop' }));
+          log('Stop signal sent', 'ev-status');
+        } else {
+          log('Cannot send stop: ws=' + ws.readyState + ', sessionReady=' + sessionReady, 'ev-error');
+        }
+
+        labelEl.textContent = 'Press to talk';
+        micBtn.disabled = false;
+        log('Recording stopped — waiting for Gemini…', 'ev-info');
+      },
+    };
 
     micBtn.classList.add('active');
     labelEl.textContent = 'Recording… click to stop';
