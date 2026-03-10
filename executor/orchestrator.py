@@ -67,6 +67,11 @@ You are a desktop automation agent. Look at the current screenshot.
 Your current task is:
   "{description}"
 
+IMPORTANT: Before typing into any input field, ALWAYS first click on that \
+field to focus it. Never assume a field is already focused. Your action should \
+be a click on the target field, not a type action, if the field has not been \
+explicitly clicked in this step.
+
 Return ONLY a single JSON action object — no markdown fences, no extra text:
 {{"type": "click|type|key_combo|scroll|double_click|move|wait", "x": <int>, "y": <int>, "text": "<string>", "keys": ["<key>", ...], "direction": "up|down", "amount": <int>, "seconds": <float>, "confidence": <0.0-1.0>, "reason": "<why>"}}
 
