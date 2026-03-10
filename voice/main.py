@@ -67,7 +67,11 @@ GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
 AGENT_URL: str = os.getenv("AGENT_URL", "http://localhost:8000").rstrip("/")
 GCP_PROJECT_ID: str = os.getenv("GCP_PROJECT_ID", "phantom-dev-489603")
 GCP_LOCATION: str = os.getenv("GCP_LOCATION", "us-east4")
-LIVE_MODEL: str = "gemini-2.0-flash-live-001"
+# Live API model - try different models if one doesn't work
+# Options: "gemini-2.0-flash", "gemini-2.5-flash", "gemini-2.5-flash-native-audio-preview-12-2025"
+# Check https://ai.google.dev/gemini-api/docs/live for current models
+# Start with basic model - if it doesn't work, try native-audio variant
+LIVE_MODEL: str = os.getenv("LIVE_MODEL", "gemini-2.0-flash")
 SYSTEM_INSTRUCTION: str = (
     "You are Phantom, a calm professional AI computer operator. "
     "When the user speaks a task, extract just the task goal as plain text "
@@ -140,13 +144,22 @@ class VoiceGateway:
             system_instruction=SYSTEM_INSTRUCTION,
         )
 
-        self._session_ctx = self._genai_client.aio.live.connect(
-            model=LIVE_MODEL,
-            config=live_config,
-        )
-        self.session = await self._session_ctx.__aenter__()
-        self.active = True
-        logger.info("[VoiceGateway] Voice session started: %s", session_id)
+        try:
+            self._session_ctx = self._genai_client.aio.live.connect(
+                model=LIVE_MODEL,
+                config=live_config,
+            )
+            self.session = await self._session_ctx.__aenter__()
+            self.active = True
+            logger.info("[VoiceGateway] Voice session started: %s (model: %s)", session_id, LIVE_MODEL)
+        except Exception as exc:
+            logger.error(
+                "[VoiceGateway] Failed to start session with model %s: %s. "
+                "Try setting LIVE_MODEL env var to 'gemini-2.5-flash-native-audio-preview-12-2025' "
+                "or 'gemini-2.0-flash'. Check https://ai.google.dev/gemini-api/docs/live for current models.",
+                LIVE_MODEL, exc
+            )
+            raise
 
     async def end_session(self) -> None:
         """Close the Gemini Live session and release resources."""
