@@ -67,11 +67,11 @@ GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
 AGENT_URL: str = os.getenv("AGENT_URL", "http://localhost:8000").rstrip("/")
 GCP_PROJECT_ID: str = os.getenv("GCP_PROJECT_ID", "phantom-dev-489603")
 GCP_LOCATION: str = os.getenv("GCP_LOCATION", "us-east4")
-# Live API model - try different models if one doesn't work
-# Options: "gemini-2.0-flash", "gemini-2.5-flash", "gemini-2.5-flash-native-audio-preview-12-2025"
+# Live API model - MUST use native-audio model for Live API
+# Official model: "gemini-2.5-flash-native-audio-preview-12-2025"
+# Regular models (gemini-2.0-flash, etc.) do NOT support Live API
 # Check https://ai.google.dev/gemini-api/docs/live for current models
-# Start with basic model - if it doesn't work, try native-audio variant
-LIVE_MODEL: str = os.getenv("LIVE_MODEL", "gemini-2.0-flash")
+LIVE_MODEL: str = os.getenv("LIVE_MODEL", "gemini-2.5-flash-native-audio-preview-12-2025")
 SYSTEM_INSTRUCTION: str = (
     "You are Phantom, a calm professional AI computer operator. "
     "When the user speaks a task, extract just the task goal as plain text "
@@ -139,26 +139,36 @@ class VoiceGateway:
             raise EnvironmentError("GEMINI_API_KEY is not set — cannot start Gemini session.")
 
         self._session_id = session_id
+        # Request both TEXT and AUDIO so we get a transcript ("TASK: ...") and spoken response.
+        # TEXT is critical for extracting the goal and posting it to the agent.
         live_config = types.LiveConnectConfig(
-            response_modalities=["AUDIO"],
-            system_instruction=SYSTEM_INSTRUCTION,
-        )
+        response_modalities=["AUDIO"],  # keep only AUDIO; TEXT here causes 1007 invalid argument
+        system_instruction=SYSTEM_INSTRUCTION)
 
         try:
+            logger.info("[VoiceGateway] Attempting to start session with model: %s", LIVE_MODEL)
+            logger.debug("[VoiceGateway] Using genai client: %s", type(self._genai_client).__name__)
+            
             self._session_ctx = self._genai_client.aio.live.connect(
                 model=LIVE_MODEL,
                 config=live_config,
             )
             self.session = await self._session_ctx.__aenter__()
             self.active = True
-            logger.info("[VoiceGateway] Voice session started: %s (model: %s)", session_id, LIVE_MODEL)
+            logger.info("[VoiceGateway] Voice session started successfully: %s (model: %s)", session_id, LIVE_MODEL)
         except Exception as exc:
+            error_msg = str(exc)
             logger.error(
-                "[VoiceGateway] Failed to start session with model %s: %s. "
-                "Try setting LIVE_MODEL env var to 'gemini-2.5-flash-native-audio-preview-12-2025' "
-                "or 'gemini-2.0-flash'. Check https://ai.google.dev/gemini-api/docs/live for current models.",
-                LIVE_MODEL, exc
+                "[VoiceGateway] Failed to start session with model %s. Error: %s (type: %s)",
+                LIVE_MODEL, error_msg, type(exc).__name__
             )
+            # Check if it's a model not found error
+            if "not found" in error_msg.lower() or "not supported" in error_msg.lower():
+                logger.error(
+                    "[VoiceGateway] Model error detected. This model may not support Live API. "
+                    "Try: 'gemini-2.5-flash-native-audio-preview-12-2025' or check API docs: "
+                    "https://ai.google.dev/gemini-api/docs/live"
+                )
             raise
 
     async def end_session(self) -> None:
@@ -204,27 +214,46 @@ class VoiceGateway:
         await self.session.send_realtime_input(
             audio=types.Blob(data=audio_chunk, mime_type="audio/pcm")
         )
-
-        # Collect the response turn
-        response_text: str = ""
-        response_audio: bytes = b""
-
-        async for response in self.session.receive():
-            # Text part
-            if response.text:
-                response_text += response.text
-
-            # Audio part
-            if (
-                response.data
-                and hasattr(response, "mime_type")
-                and "audio" in (response.mime_type or "")
-            ):
-                response_audio += response.data
-
-            # End-of-turn signal
-            if response.server_content and response.server_content.turn_complete:
-                break
+        
+        # Try to get response (non-blocking check)
+        # Gemini may not respond to every chunk, only when user pauses or finishes
+        try:
+            # Check if there's a response available (with timeout)
+            response_text: str = ""
+            response_audio: bytes = b""
+            
+            # Process any available responses (non-blocking)
+            async for response in self.session.receive():
+                if response.text:
+                    response_text += response.text
+                    logger.debug("[VoiceGateway:%s] Received text: %r", self._session_id, response.text)
+                
+                if (
+                    response.data
+                    and hasattr(response, "mime_type")
+                    and "audio" in (response.mime_type or "")
+                ):
+                    response_audio += response.data
+                
+                if response.server_content and response.server_content.turn_complete:
+                    break
+                    
+            if response_text:
+                stripped = response_text.strip()
+                logger.info("[VoiceGateway:%s] Full response text: %r", self._session_id, stripped)
+                if stripped.upper().startswith("TASK:"):
+                    goal = stripped[5:].strip()
+                    logger.info("[VoiceGateway:%s] Task detected: %r", self._session_id, goal)
+                    await self._post_task_to_agent(goal)
+                    return goal
+                return stripped
+                
+            if response_audio:
+                return response_audio
+        except Exception as exc:
+            logger.debug("[VoiceGateway:%s] No response yet or error: %s", self._session_id, exc)
+        
+        return None
 
         # ── Interpret text response ──────────────────────────────────────
         if response_text:
@@ -246,6 +275,77 @@ class VoiceGateway:
         if response_audio:
             return response_audio   # type: ignore[return-value]  # bytes
 
+        return None
+
+    async def finish_speech_and_get_response(self) -> str | bytes | None:
+        """
+        Signal that user finished speaking and get final response from Gemini.
+        Call this after user stops recording.
+        """
+        if not self.active or self.session is None:
+            logger.warning("[VoiceGateway:%s] finish_speech_and_get_response called but session not active", self._session_id)
+            return None
+            
+        # Send empty audio chunk to signal end of speech
+        logger.info("[VoiceGateway:%s] Sending end-of-speech signal to Gemini...", self._session_id)
+        try:
+            # Send empty audio to signal completion
+            await self.session.send_realtime_input(
+                audio=types.Blob(data=b"", mime_type="audio/pcm")
+            )
+            logger.debug("[VoiceGateway:%s] End-of-speech signal sent", self._session_id)
+        except Exception as exc:
+            logger.warning("[VoiceGateway:%s] Failed to send end-of-speech signal: %s", self._session_id, exc)
+            
+        logger.info("[VoiceGateway:%s] Waiting for final response from Gemini...", self._session_id)
+        try:
+            response_text: str = ""
+            response_audio: bytes = b""
+            response_count = 0
+            
+            # Wait for final response with timeout handling
+            async for response in self.session.receive():
+                response_count += 1
+                logger.debug("[VoiceGateway:%s] Received response #%d: text=%s, has_data=%s, turn_complete=%s", 
+                           self._session_id, response_count, 
+                           bool(response.text), 
+                           bool(response.data),
+                           response.server_content.turn_complete if response.server_content else None)
+                
+                if response.text:
+                    response_text += response.text
+                    logger.info("[VoiceGateway:%s] Response text chunk: %r", self._session_id, response.text)
+                
+                if (
+                    response.data
+                    and hasattr(response, "mime_type")
+                    and "audio" in (response.mime_type or "")
+                ):
+                    response_audio += response.data
+                    logger.debug("[VoiceGateway:%s] Received audio chunk: %d bytes", self._session_id, len(response.data))
+                
+                if response.server_content and response.server_content.turn_complete:
+                    logger.info("[VoiceGateway:%s] Turn complete signal received", self._session_id)
+                    break
+                    
+            if response_text:
+                stripped = response_text.strip()
+                logger.info("[VoiceGateway:%s] Final response text: %r", self._session_id, stripped)
+                if stripped.upper().startswith("TASK:"):
+                    goal = stripped[5:].strip()
+                    logger.info("[VoiceGateway:%s] Task detected: %r", self._session_id, goal)
+                    await self._post_task_to_agent(goal)
+                    return goal
+                return stripped
+                
+            if response_audio:
+                logger.info("[VoiceGateway:%s] Final response audio: %d bytes", self._session_id, len(response_audio))
+                return response_audio
+                
+            logger.warning("[VoiceGateway:%s] No response received from Gemini (got %d response chunks)", self._session_id, response_count)
+        except Exception as exc:
+            logger.error("[VoiceGateway:%s] Error getting final response: %s", self._session_id, exc, exc_info=True)
+        
         return None
 
     # ------------------------------------------------------------------ #
@@ -364,12 +464,15 @@ async def stream(websocket: WebSocket):
             # ── Binary frame: audio chunk ────────────────────────────────
             if message.get("bytes"):
                 audio_chunk: bytes = message["bytes"]
+                logger.debug("[/stream:%s] Received audio chunk: %d bytes", session_id, len(audio_chunk))
 
                 if not gateway.active:
                     await _send_event("error", message="Session not started. Send {type:start} first.")
                     continue
 
                 result = await gateway.stream_audio(audio_chunk)
+                if result:
+                    logger.info("[/stream:%s] stream_audio returned: %s (type: %s)", session_id, result[:100] if isinstance(result, str) else f"{len(result)} bytes", type(result).__name__)
 
                 if result is None:
                     pass  # Gemini still processing — no meaningful output yet
@@ -414,9 +517,32 @@ async def stream(websocket: WebSocket):
                         await _send_event("error", message=str(exc))
 
                 elif msg_type == "stop":
-                    await gateway.end_session()
-                    await _send_event("session_ended")
-                    break
+                    # User finished speaking - get final response (but keep session open)
+                    logger.info("[/stream:%s] Received stop message - user finished speaking", session_id)
+                    logger.info("[/stream:%s] Calling finish_speech_and_get_response...", session_id)
+                    final_response = await gateway.finish_speech_and_get_response()
+                    logger.info("[/stream:%s] finish_speech_and_get_response returned: %s", session_id, 
+                              "None" if final_response is None else f"{type(final_response).__name__} ({len(final_response) if isinstance(final_response, (str, bytes)) else 'N/A'})")
+                    
+                    if final_response:
+                        if isinstance(final_response, bytes):
+                            await websocket.send_bytes(final_response)
+                        elif isinstance(final_response, str):
+                            stripped = final_response.strip()
+                            if stripped.upper().startswith("TASK:"):
+                                goal = stripped[5:].strip()
+                                await _send_event("task_detected", goal=goal)
+                                confirm_audio = await gateway.send_status_update(
+                                    f"Got it. Starting task: {goal}"
+                                )
+                                if confirm_audio:
+                                    await websocket.send_bytes(confirm_audio)
+                            else:
+                                await _send_event("status_update", text=stripped)
+                    else:
+                        await _send_event("status_update", text="Processing your request...")
+                    # Don't end session - user might want to speak again
+                    continue
 
                 elif msg_type == "status":
                     text = control.get("text", "")
