@@ -42,7 +42,8 @@ import uuid
 
 import httpx
 from dotenv import load_dotenv
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from google import genai
 from google.genai import types
@@ -67,6 +68,8 @@ GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
 AGENT_URL: str = os.getenv("AGENT_URL", "http://localhost:8000").rstrip("/")
 GCP_PROJECT_ID: str = os.getenv("GCP_PROJECT_ID", "phantom-dev-489603")
 GCP_LOCATION: str = os.getenv("GCP_LOCATION", "us-east4")
+# Text model for offline STT → TASK flow (non-Live). Must be a regular Gemini model name.
+TEXT_MODEL: str = os.getenv("TEXT_MODEL", "gemini-2.5-flash")
 # Live API model - MUST use native-audio model for Live API
 # Official model: "gemini-2.5-flash-native-audio-preview-12-2025"
 # Regular models (gemini-2.0-flash, etc.) do NOT support Live API
@@ -423,6 +426,145 @@ class VoiceGateway:
 # ---------------------------------------------------------------------------
 # HTTP endpoints
 # ---------------------------------------------------------------------------
+
+@app.post("/stt-task")
+async def stt_task(request: Request):
+    """
+    One-shot speech → TASK flow using the non-Live Gemini API.
+
+    Contract (v1):
+      - Client sends a single audio blob in the request body.
+      - Content-Type should be an audio type (e.g. audio/webm, audio/wav, audio/pcm).
+      - Server calls Gemini text model to:
+          1) transcribe the audio
+          2) compress it into a single goal sentence
+          3) return exactly:  TASK: <goal>
+      - We parse <goal>, POST it to the Agent /task endpoint, and return:
+          { "goal": "<goal>", "task_id": "<uuid>", "session_id": "<uuid>" }
+    """
+    try:
+        audio_bytes = await request.body()
+        if not audio_bytes:
+            return JSONResponse(
+                {"message": "Empty audio payload"},
+                status_code=400,
+            )
+
+        content_type = request.headers.get("content-type", "audio/webm")
+
+        if not GEMINI_API_KEY:
+            logger.error("[/stt-task] GEMINI_API_KEY is not set")
+            return JSONResponse(
+                {"message": "GEMINI_API_KEY is not configured on the server"},
+                status_code=500,
+            )
+
+        genai_client = genai.Client(api_key=GEMINI_API_KEY)
+
+        prompt = (
+            "You are Phantom's voice interface.\n"
+            "The user audio contains a single task they want Phantom to perform "
+            "on the computer (for example: move Jira tickets, update a Google Sheet, "
+            "send a Slack message).\n\n"
+            "Instructions:\n"
+            "1) Transcribe what the user said.\n"
+            "2) Summarize it into one concise goal sentence in English.\n"
+            "3) Return EXACTLY one line in this format (no explanations, no quotes, "
+            "no markdown, no extra text):\n"
+            "TASK: <concise goal in English>\n"
+        )
+
+        logger.info(
+            "[/stt-task] Calling Gemini text model %s for STT (content_type=%s, bytes=%d)",
+            TEXT_MODEL,
+            content_type,
+            len(audio_bytes),
+        )
+
+        # We send both the audio and the textual instructions as parts of a single user turn.
+        response = genai_client.models.generate_content(
+            model=TEXT_MODEL,
+            contents=[
+                types.Content(
+                    role="user",
+                    parts=[
+                        types.Part.from_bytes(data=audio_bytes, mime_type=content_type),
+                        types.Part(text=prompt),
+                    ],
+                )
+            ],
+        )
+
+        # Extract full text from all candidates to be robust to model formatting.
+        full_text = ""
+        try:
+            for cand in getattr(response, "candidates", []) or []:
+                content = getattr(cand, "content", None)
+                if not content:
+                    continue
+                for part in getattr(content, "parts", []) or []:
+                    text_part = getattr(part, "text", None)
+                    if text_part:
+                        full_text += text_part
+        except Exception as exc:
+            logger.warning("[/stt-task] Failed to parse Gemini response: %s", exc)
+
+        stripped = (full_text or "").strip()
+        logger.info("[/stt-task] Gemini STT raw response: %r", stripped)
+
+        if not stripped:
+            return JSONResponse(
+                {"message": "No text returned from Gemini"},
+                status_code=502,
+            )
+
+        # Be forgiving if the model forgot the TASK: prefix.
+        if stripped.upper().startswith("TASK:"):
+            goal = stripped[5:].strip()
+        else:
+            goal = stripped
+
+        if not goal:
+            return JSONResponse(
+                {"message": "Parsed empty goal from Gemini response"},
+                status_code=502,
+            )
+
+        # Use a fresh session_id here; voice Live session is not reused.
+        session_id = str(uuid.uuid4())
+        payload = {"goal": goal, "session_id": session_id}
+        agent_url = f"{AGENT_URL}/task"
+
+        logger.info("[/stt-task] Posting task to agent at %s", agent_url)
+        task_id = None
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.post(agent_url, json=payload)
+                resp.raise_for_status()
+                data = resp.json() or {}
+                task_id = data.get("task_id")
+                logger.info("[/stt-task] Task created in agent — task_id=%s", task_id)
+        except Exception as exc:
+            logger.error("[/stt-task] Failed to POST task to agent: %s", exc)
+            # Still return the goal and session so the client can show something useful.
+            return JSONResponse(
+                {
+                    "goal": goal,
+                    "session_id": session_id,
+                    "message": f"Failed to POST task to agent: {exc}",
+                },
+                status_code=502,
+            )
+
+        return JSONResponse(
+            {"goal": goal, "task_id": task_id, "session_id": session_id},
+            status_code=200,
+        )
+
+    except Exception as exc:
+        logger.exception("[/stt-task] Unhandled error: %s", exc)
+        return JSONResponse({"message": str(exc)}, status_code=500)
+
 
 @app.get("/health")
 async def health():
