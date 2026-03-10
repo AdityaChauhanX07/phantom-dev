@@ -65,8 +65,9 @@ logger = logging.getLogger("phantom.voice")
 
 GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
 AGENT_URL: str = os.getenv("AGENT_URL", "http://localhost:8000").rstrip("/")
+GCP_PROJECT_ID: str = os.getenv("GCP_PROJECT_ID", "phantom-dev-489603")
+GCP_LOCATION: str = os.getenv("GCP_LOCATION", "us-east4")
 LIVE_MODEL: str = "gemini-2.0-flash-live-001"
-
 SYSTEM_INSTRUCTION: str = (
     "You are Phantom, a calm professional AI computer operator. "
     "When the user speaks a task, extract just the task goal as plain text "
