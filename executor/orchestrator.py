@@ -38,6 +38,13 @@ DRY_RUN = False
 # ---------------------------------------------------------------------------
 
 DECOMPOSE_PROMPT = """\
+IMPORTANT CONTEXT — App URLs to use:
+- Jira: https://adityachauhanx07.atlassian.net/jira/software/projects/SCRUM/boards/1
+- Google Sheets: navigate to sheets.google.com and open 'Bug Tracker'
+- Slack: navigate to app.slack.com
+
+Always navigate directly to these URLs. Do not search for the apps.
+
 You are a desktop automation planner. The user wants to accomplish this goal:
 
   "{goal}"
