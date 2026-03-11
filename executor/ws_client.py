@@ -6,10 +6,11 @@ cloud agent backend.
 Message contract
 ----------------
 Outbound (executor → agent):
-  {"type": "screenshot", "task_id": str, "data": <b64>, "timestamp": str}
-  {"type": "task_result",  "task_id": str, "data": <task_state dict>}
+  {"type": "screenshot",  "task_id": str, "data": <b64>}
+  {"type": "task_result", "task_id": str, "data": {"status": str, "goal": str}}
 
 Inbound (agent → executor):
+  {"type": "task",   "task_id": str, "goal": str, "session_id": str}
   {"type": "action", ...action fields...}
   (other types are silently discarded)
 """
@@ -18,7 +19,6 @@ import asyncio
 import json
 import logging
 import os
-from datetime import datetime, timezone
 
 import websockets
 from dotenv import load_dotenv
@@ -162,21 +162,25 @@ class PhantomWSClient:
             "type": "screenshot",
             "task_id": task_id,
             "data": screenshot_b64,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
         }
         await self._send(message)
 
-    async def send_task_result(self, task_state: dict) -> None:
+    async def send_task_result(self, task_id: str, status: str, goal: str) -> None:
         """
-        Send the final task state to the agent backend.
+        Send the final task result to the agent backend.
 
         Args:
-            task_state: State dict returned by ``TaskOrchestrator.run()``.
+            task_id: Identifier for the completed task.
+            status:  ``"completed"`` or ``"failed"``.
+            goal:    The original goal string.
         """
         message = {
             "type": "task_result",
-            "task_id": task_state.get("goal", ""),
-            "data": task_state,
+            "task_id": task_id,
+            "data": {
+                "status": status,
+                "goal": goal,
+            },
         }
         await self._send(message)
 
@@ -186,13 +190,14 @@ class PhantomWSClient:
 
     async def receive_action(self, timeout: float = 30.0) -> dict | None:
         """
-        Wait for an ``"action"`` message from the agent backend.
+        Wait for an ``"action"`` or ``"task"`` message from the agent backend.
 
         Args:
             timeout: Maximum seconds to wait.
 
         Returns:
-            The message dict if ``type == "action"``, otherwise ``None``.
+            The full message dict for ``type == "action"`` or ``type == "task"``,
+            otherwise ``None``.
         """
         try:
             message = await asyncio.wait_for(self._inbox.get(), timeout=timeout)
@@ -202,10 +207,11 @@ class PhantomWSClient:
             )
             return None
 
-        if message.get("type") != "action":
+        msg_type = message.get("type")
+        if msg_type not in ("action", "task"):
             logger.debug(
-                "[PhantomWSClient.receive_action] Discarding non-action message: type=%r",
-                message.get("type"),
+                "[PhantomWSClient.receive_action] Discarding unhandled message: type=%r",
+                msg_type,
             )
             return None
 
