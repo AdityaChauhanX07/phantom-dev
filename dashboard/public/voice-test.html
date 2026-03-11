@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Phantom Dev — Voice Test</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #030712;
+      color: #f1f5f9;
+      font-family: monospace;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      gap: 24px;
+      padding: 24px;
+    }
+    h1 { font-size: 1.5rem; color: #fff; }
+    p.sub { color: #6b7280; font-size: 0.85rem; }
+    #status {
+      font-size: 0.85rem;
+      padding: 6px 14px;
+      border-radius: 999px;
+      background: #1f2937;
+      color: #9ca3af;
+    }
+    #status.connected { background: #052e16; color: #4ade80; }
+    #status.error { background: #450a0a; color: #f87171; }
+    #mic-btn {
+      width: 96px; height: 96px;
+      border-radius: 50%;
+      border: none;
+      background: #1d4ed8;
+      color: #fff;
+      font-size: 2rem;
+      cursor: pointer;
+      transition: background 0.2s, transform 0.1s;
+    }
+    #mic-btn:hover { background: #2563eb; }
+    #mic-btn.active { background: #dc2626; animation: pulse 1s infinite; }
+    #mic-btn:disabled { background: #374151; cursor: not-allowed; }
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.08); }
+    }
+    #label { font-size: 0.9rem; color: #6b7280; }
+    #log {
+      width: 100%;
+      max-width: 560px;
+      background: #111827;
+      border: 1px solid #1f2937;
+      border-radius: 12px;
+      padding: 16px;
+      min-height: 160px;
+      max-height: 320px;
+      overflow-y: auto;
+      font-size: 0.8rem;
+      line-height: 1.6;
+    }
+    .ev-task { color: #60a5fa; }
+    .ev-status { color: #a3e635; }
+    .ev-error { color: #f87171; }
+    .ev-info { color: #6b7280; }
+    .ev-audio { color: #c084fc; }
+  </style>
+</head>
+<body>
+
+<h1>🔮 Phantom Dev — Voice Test</h1>
+<p class="sub">Say "Hey Phantom, [your task]" after pressing the mic button</p>
+
+<div id="status">Connecting…</div>
+<button id="mic-btn" disabled>🎤</button>
+<div id="label">Press to talk</div>
+<div id="log"><span class="ev-info">Waiting for connection…</span></div>
+
+<script>
+  const VOICE_WS = 'wss://phantom-voice-874381233509.us-central1.run.app/stream';
+  const STT_HTTP = 'https://phantom-voice-874381233509.us-central1.run.app/stt-task';
+
+  const statusEl = document.getElementById('status');
+  const micBtn = document.getElementById('mic-btn');
+  const labelEl = document.getElementById('label');
+  const logEl = document.getElementById('log');
+
+  let ws = null;
+  let mediaRecorder = null;           // PCM stream + STT recorder bundle
+  let sessionStarted = false;
+  let sessionReady = false;  // True when session_started event received
+  let audioContext = null;
+  let pendingStream = null;  // Store stream if mic access happens before session ready
+
+  function log(msg, cls = 'ev-info') {
+    const line = document.createElement('div');
+    line.className = cls;
+    const t = new Date().toLocaleTimeString('en-US', { hour12: false });
+    line.textContent = `[${t}] ${msg}`;
+    logEl.prepend(line);
+  }
+
+  function connect() {
+    ws = new WebSocket(VOICE_WS);
+    ws.binaryType = 'arraybuffer';
+
+    ws.onopen = () => {
+      statusEl.textContent = 'Connected — ready to listen';
+      statusEl.className = 'connected';
+      micBtn.disabled = false;
+      labelEl.textContent = 'Press mic and say “Hey Phantom, [your task]”';
+      log('WebSocket connected to voice gateway', 'ev-status');
+    };
+
+    ws.onclose = () => {
+      statusEl.textContent = 'Disconnected — reload to retry';
+      statusEl.className = 'error';
+      micBtn.disabled = true;
+      labelEl.textContent = 'Connection lost. Reload the page.';
+      log('WebSocket disconnected from voice gateway', 'ev-error');
+    };
+
+    ws.onerror = (e) => {
+      log('WebSocket error — check Phantom Voice service / network', 'ev-error');
+    };
+
+    ws.onmessage = async (ev) => {
+      if (ev.data instanceof ArrayBuffer) {
+        log('Audio response: ' + ev.data.byteLength + ' bytes', 'ev-audio');
+        await playAudio(ev.data);
+        return;
+      }
+      try {
+        const msg = JSON.parse(ev.data);
+        handleEvent(msg);
+      } catch { log('Non-JSON: ' + ev.data, 'ev-info'); }
+    };
+  }
+
+  function handleEvent(msg) {
+    switch (msg.event) {
+      case 'session_started':
+        log('Session started: ' + msg.session_id, 'ev-status');
+        sessionReady = true;
+        // If we already have a pending stream, start recording now
+        if (pendingStream) {
+          startRecording(pendingStream);
+          pendingStream = null;
+        }
+        break;
+      case 'task_detected':
+        log('TASK DETECTED: ' + msg.goal, 'ev-task');
+        labelEl.textContent = 'Task sent to agent!'; break;
+      case 'status_update':
+        log('Status: ' + msg.text, 'ev-status'); break;
+      case 'session_ended':
+        log('Session ended', 'ev-info');
+        sessionReady = false;
+        break;
+      case 'error':
+        log('Error: ' + msg.message, 'ev-error'); break;
+      default:
+        log('Event: ' + JSON.stringify(msg), 'ev-info');
+    }
+  }
+
+  async function playAudio(buffer) {
+    if (!audioContext) audioContext = new AudioContext();
+    try {
+      const decoded = await audioContext.decodeAudioData(buffer);
+      const source = audioContext.createBufferSource();
+      source.buffer = decoded;
+      source.connect(audioContext.destination);
+      source.start();
+    } catch (e) {
+      log('Audio decode error: ' + e.message, 'ev-error');
+    }
+  }
+
+  // ── Helper: send recorded audio to /stt-task via HTTP ─────────────────────
+
+  async function sendSttTask(blob) {
+    try {
+      log('Sending audio to STT /stt-task…', 'ev-info');
+      const res = await fetch(STT_HTTP, {
+        method: 'POST',
+        headers: {
+          'Content-Type': blob.type || 'audio/webm',
+        },
+        body: blob,
+      });
+
+      const text = await res.text();
+      let data = null;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        log('STT raw response (non-JSON): ' + text, 'ev-error');
+        return;
+      }
+
+      if (!res.ok) {
+        log('STT error from /stt-task: ' + (data.message || res.status), 'ev-error');
+        return;
+      }
+
+      const goal = data.goal || '(no goal)';
+      const taskId = data.task_id || '(no task_id)';
+      log(`HTTP TASK DETECTED: ${goal} (task_id=${taskId})`, 'ev-task');
+      labelEl.textContent = 'Task sent to agent!';
+    } catch (e) {
+      log('STT request failed (network or CORS): ' + e.message, 'ev-error');
+      statusEl.textContent = 'Error talking to STT service';
+      statusEl.className = 'error';
+    }
+  }
+
+  function startRecording(stream) {
+    // Use Web Audio API to convert to PCM format (16-bit, 16kHz, mono)
+    if (!audioContext) audioContext = new AudioContext({ sampleRate: 16000 });
+    
+    const source = audioContext.createMediaStreamSource(stream);
+    const processor = audioContext.createScriptProcessor(4096, 1, 1);
+
+    // ── Live PCM → WebSocket (for Live API) ────────────────────────────────
+    let chunkCount = 0;
+    processor.onaudioprocess = (e) => {
+      if (!sessionReady || ws.readyState !== WebSocket.OPEN) return;
+      
+      const inputData = e.inputBuffer.getChannelData(0);
+      // Convert Float32Array to Int16Array (16-bit PCM)
+      const pcmData = new Int16Array(inputData.length);
+      for (let i = 0; i < inputData.length; i++) {
+        // Clamp to [-1, 1] and convert to 16-bit integer
+        const s = Math.max(-1, Math.min(1, inputData[i]));
+        pcmData[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+      }
+      ws.send(pcmData.buffer);
+      chunkCount++;
+      if (chunkCount % 20 === 0) { // Log every 20 chunks (~1 second)
+        log(`Sent ${chunkCount} audio chunks (${pcmData.buffer.byteLength} bytes each)`, 'ev-info');
+      }
+    };
+
+    source.connect(processor);
+    processor.connect(audioContext.destination);
+
+    // ── Parallel STT recording (MediaRecorder → /stt-task) ────────────────
+    let sttChunks = [];
+    let sttRecorder = null;
+    try {
+      sttRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+    } catch (e) {
+      log('MediaRecorder not available for STT: ' + e.message, 'ev-error');
+    }
+
+    if (sttRecorder) {
+      sttRecorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) sttChunks.push(e.data);
+      };
+      sttRecorder.onstop = () => {
+        if (!sttChunks.length) {
+          log('No STT audio chunks captured', 'ev-error');
+          return;
+        }
+        const blob = new Blob(sttChunks, { type: 'audio/webm' });
+        // Fire and forget; errors are logged inside sendSttTask
+        void sendSttTask(blob);
+      };
+      sttRecorder.start(250);
+      log('STT recorder started (audio/webm)', 'ev-info');
+    }
+
+    // Store for cleanup
+    mediaRecorder = {
+      processor,
+      source,
+      stream,
+      sttRecorder,
+      stop: () => {
+        processor.disconnect();
+        source.disconnect();
+        stream.getTracks().forEach(t => t.stop());
+
+        if (sttRecorder && sttRecorder.state !== 'inactive') {
+          sttRecorder.stop();
+        }
+
+        // Signal to server that user finished speaking
+        if (ws.readyState === WebSocket.OPEN && sessionReady) {
+          log('Sending stop signal to server...', 'ev-info');
+          ws.send(JSON.stringify({ type: 'stop' }));
+          log('Stop signal sent', 'ev-status');
+        } else {
+          log('Cannot send stop: ws=' + ws.readyState + ', sessionReady=' + sessionReady, 'ev-error');
+        }
+
+        labelEl.textContent = 'Press to talk';
+        micBtn.disabled = false;
+        log('Recording stopped — waiting for Gemini…', 'ev-info');
+      },
+    };
+
+    micBtn.classList.add('active');
+    labelEl.textContent = 'Recording… click to stop';
+    log('Recording started', 'ev-info');
+  }
+
+  micBtn.addEventListener('click', async () => {
+    if (mediaRecorder && mediaRecorder.stop) {
+      mediaRecorder.stop();
+      micBtn.classList.remove('active');
+      labelEl.textContent = 'Processing…';
+      micBtn.disabled = true;
+      mediaRecorder = null;
+      return;
+    }
+
+    // Start session if not started
+    if (!sessionStarted) {
+      ws.send(JSON.stringify({ type: 'start', session_id: crypto.randomUUID() }));
+      sessionStarted = true;
+      labelEl.textContent = 'Starting session…';
+    }
+
+    // Request microphone access
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch (e) {
+      log('Mic access denied: ' + e.message, 'ev-error');
+      return;
+    }
+
+    // Wait for session to be ready before starting recording
+    if (!sessionReady) {
+      log('Waiting for session to start…', 'ev-info');
+      labelEl.textContent = 'Waiting for session…';
+      pendingStream = stream;
+      return;
+    }
+
+    // Session is ready, start recording immediately
+    startRecording(stream);
+  });
+
+  connect();
+</script>
+</body>
+</html>
