@@ -141,7 +141,8 @@ class PhantomExecutor:
                 msg_type = message.get("type")
 
                 if msg_type == "task":
-                    goal = message.get("goal") or message.get("data", {}).get("goal", "")
+                    task_id = message["task_id"]
+                    goal = message["goal"]
                     if not goal:
                         logger.warning(
                             "[PhantomExecutor] Received task message with no goal: %s",
@@ -153,11 +154,15 @@ class PhantomExecutor:
                     self.current_task = goal
 
                     orchestrator = TaskOrchestrator(goal)
-                    state = orchestrator.run()   # sync — runs in the event loop thread
-                    _print_state_summary(state)
+                    final_state = orchestrator.run()   # sync — runs in the event loop thread
+                    _print_state_summary(final_state)
                     self.current_task = None
 
-                    await self.ws.send_task_result(state)
+                    await self.ws.send_task_result(
+                        task_id=task_id,
+                        status=final_state.get("status", "failed"),
+                        goal=final_state.get("goal", ""),
+                    )
 
                 elif msg_type == "shutdown":
                     logger.info("[PhantomExecutor] Shutdown command received.")
