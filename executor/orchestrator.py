@@ -38,13 +38,53 @@ DRY_RUN = False
 # ---------------------------------------------------------------------------
 
 DECOMPOSE_PROMPT = """\
-You are a desktop automation planner. The user wants to accomplish this goal:
+You are a desktop automation planner running on macOS. The user wants to accomplish this goal:
 
   "{goal}"
 
-IMPORTANT: Before planning any steps, check the current screen state carefully.
-If an application is already open and visible on screen, do NOT include a step
-to open it. Start from the current screen state and work forward from there.
+IMPORTANT: 
+- You are running on macOS (not Windows). There is NO Start button.
+- Before planning any steps, check the current screen state carefully.
+- If an application is already open and visible on screen, do NOT include a step to open it.
+- Start from the current screen state and work forward from there.
+- If the user mentions a specific browser (Chrome, Firefox, Safari), but you see a different browser already open, use the browser that's currently visible on screen. Work with what's actually there, not what was requested.
+
+OPENING APPLICATIONS vs WEBSITES (CRITICAL - USE DIRECT METHODS):
+
+1. FOR APPLICATIONS (Calculator, TextEdit, Safari, Chrome, Firefox, Finder, etc.):
+   - Use {{"type": "open_app", "app_name": "Calculator"}}
+   - Examples:
+     - "open Calculator" → {{"type": "open_app", "app_name": "Calculator"}}
+     - "open Safari" → {{"type": "open_app", "app_name": "Safari"}}
+     - "open Chrome" → {{"type": "open_app", "app_name": "Google Chrome"}}
+     - "open TextEdit" → {{"type": "open_app", "app_name": "TextEdit"}}
+
+2. FOR WEBSITES (YouTube, Google, Jira, Google Gemini, etc.):
+   - ALWAYS use {{"type": "open_url", "url": "youtube.com"}} - this is the ONLY reliable method
+   - NEVER try to click bookmarks, search bars, or navigate through browser UI
+   - NEVER try to find and click on website links or bookmarks - just use open_url directly
+   - Examples:
+     - "open YouTube" → {{"type": "open_url", "url": "youtube.com"}}
+     - "open Google" → {{"type": "open_url", "url": "google.com"}}
+     - "open Google Gemini" → {{"type": "open_url", "url": "gemini.google.com"}}
+     - "go to Jira" → {{"type": "open_url", "url": "jira.com"}}
+     - "search for Gemini" → {{"type": "open_url", "url": "google.com"}} (then type in search)
+   - You can use just the domain (youtube.com) or full URL (https://youtube.com) - both work
+   - For Google services: "Google Gemini" → "gemini.google.com", "Google" → "google.com"
+
+3. HOW TO DISTINGUISH:
+   - If it's a website name (YouTube, Google, Facebook, Twitter, Jira, Google Gemini, etc.) → use "open_url"
+   - If it's a macOS application (Calculator, TextEdit, Safari, Chrome, Finder, etc.) → use "open_app"
+   - If unsure, websites usually have ".com" in the name or are well-known web services
+
+4. CRITICAL RULES FOR WEBSITES:
+   - DO NOT click on bookmarks, links, or browser UI elements
+   - DO NOT try to navigate through browser menus
+   - DO NOT search for the website in address bar
+   - ALWAYS use open_url directly - it's the simplest and most reliable method
+   - If the task says "open [Website]" or "go to [Website]", use open_url with the website domain
+
+5. NEVER use Command+Shift+A, Command+Space, or Finder → Applications - these are too complex and unreliable
 
 Look at the current screenshot and break the goal into ordered, atomic sub-steps.
 Return ONLY a JSON array — no markdown fences, no extra text:
@@ -58,45 +98,216 @@ Return ONLY a JSON array — no markdown fences, no extra text:
 Rules:
 - Each step must be a single, observable action (one click, one keystroke, etc.).
 - Keep descriptions concise and unambiguous.
-- expected_result should be visually verifiable from a screenshot.
+- expected_result MUST be visually verifiable from a screenshot.
+- expected_result should describe the FINAL STATE, not the action itself.
+- Remember: This is macOS, not Windows. Use macOS-specific shortcuts (Cmd+Tab for app switching).
+- To open applications: ALWAYS try Dock first. If Dock icon is visible, use ONE step: "Click on [AppName] icon in Dock"
+- DO NOT use keyboard shortcuts like Command+Shift+A or Command+Space unless absolutely necessary
+- Keep steps SIMPLE - if you can do it in 1 click, don't make it 3 steps
+
+EXPECTED RESULT GUIDELINES (CRITICAL):
+- expected_result must describe what the SCREEN should show, not what action was taken
+- Good: "Google homepage is open and visible" (describes screen state)
+- Bad: "Opened Google" (describes action, not state)
+- Good: "Search results for 'Gemini' are displayed" (describes screen state)
+- Bad: "Searched for Gemini" (describes action, not state)
+- The verifier will check if the expected_result is visible on screen
+- Make expected_result specific and checkable: "X is visible", "Y appears", "Z is displayed"
+
+FOR SEARCH TASKS (e.g., "open Google and search for Gemini"):
+- Step 1: Open the website
+  - Description: "Open Google"
+  - Expected result: "Google homepage or search page is open and visible on screen"
+- Step 2: Type the search query
+  - Description: "Type 'Gemini' into the search bar"
+  - Expected result: "The search query 'Gemini' appears in the search bar, OR search results for 'Gemini' are displayed"
+- Step 3: Execute the search (if Step 2 didn't auto-execute)
+  - Description: "Press Enter to execute the search"
+  - Expected result: "Search results page for 'Gemini' is displayed with links, snippets, or video thumbnails"
+- The FINAL step's expected_result should clearly indicate task completion
+- If search results are visible → task is complete → mark that step as the last one
 """
 
 NEXT_ACTION_PROMPT = """\
-You are a desktop automation agent. Look at the current screenshot.
+You are a desktop automation agent running on macOS. Look at the current screenshot.
 
 Your current task is:
   "{description}"
 
-IMPORTANT: Before typing into any input field, ALWAYS first click on that \
-field to focus it. Never assume a field is already focused. Your action should \
-be a click on the target field, not a type action, if the field has not been \
-explicitly clicked in this step.
+IMPORTANT: 
+- You are on macOS (not Windows). There is NO Start button. Use Cmd+Tab to switch apps.
+- For tasks that say "Type X into Y" (e.g., "Type 'Google Gemini' into the address bar"):
+  - You MUST return a "type" action with both "x" and "y" coordinates of the input field AND the "text" field.
+  - The executor will automatically click on the field first, then type the text.
+  - Example: {{"type": "type", "x": 430, "y": 55, "text": "Google Gemini", "confidence": 0.9, "reason": "Typing into address bar"}}
+- For tasks that say "search for X" or "search X":
+  - METHOD 1 (PREFERRED): Click on search box, then type
+    - CRITICAL: You must find the EXACT center of the search bar
+    - On Google: The search box is a large rounded rectangle in the CENTER of the page
+      - Typical coordinates: x = screen_width/2 (usually 640-960 for 1280-1920px screens), y = screen_height/2 (usually 300-500 for 1080p screens)
+      - Look carefully at the screenshot - find the CENTER of the visible search box rectangle
+      - The search box is usually the largest, most prominent input field on the page
+    - Steps:
+      1. Identify the search box visually (large rounded rectangle, often with placeholder text)
+      2. Calculate the CENTER coordinates (x = left + width/2, y = top + height/2)
+      3. Return type action with those coordinates
+    - Example for "search for Gemini" on Google:
+      {{"type": "type", "x": 640, "y": 400, "text": "Gemini", "confidence": 0.9, "reason": "Typing 'Gemini' into the center of Google search box"}}
+    - The executor will automatically click on the field at (x, y), select all text, then type the new text
+    - IMPORTANT: Use high confidence (0.8-0.9) only if you can clearly see the search box boundaries
+  - METHOD 2 (FALLBACK): If search box coordinates are uncertain, use Tab navigation
+    - Press Tab key multiple times to navigate to the search box (usually 1-3 tabs on Google)
+    - Then type the search query
+    - Example:
+      1. {{"type": "key_combo", "keys": ["tab"], "confidence": 0.8, "reason": "Navigating to search box using Tab"}}
+      2. {{"type": "type", "text": "Gemini", "confidence": 1.0, "reason": "Typing search query (field already focused via Tab)"}}
+  - After typing (either method), press Enter:
+    {{"type": "key_combo", "keys": ["return"], "confidence": 1.0, "reason": "Pressing Enter to execute search"}}
+- For typing text, ALWAYS use the "type" action with the "text" field. Include coordinates (x, y) of the input field.
+- When typing into a field that already has text (like an address bar or search bar), the executor will automatically select all text first, then type the new text.
+- For macOS: Use "cmd" (not "ctrl") for keyboard shortcuts. Use "command" or "cmd" key names.
+
+OPENING APPLICATIONS vs WEBSITES (CRITICAL - USE DIRECT METHODS):
+
+1. FOR APPLICATIONS (Calculator, TextEdit, Safari, Chrome, Finder):
+   - Use {{"type": "open_app", "app_name": "Calculator"}}
+   - Examples: "open Calculator", "open Safari", "open TextEdit"
+
+2. FOR WEBSITES (YouTube, Google, Jira, Google Gemini, Facebook, etc.):
+   - ALWAYS use {{"type": "open_url", "url": "youtube.com"}} - this is the ONLY reliable method
+   - NEVER try to click bookmarks, search bars, or navigate through browser UI
+   - NEVER try to find and click on website links - just use open_url directly
+   - Examples:
+     - "open YouTube" → {{"type": "open_url", "url": "youtube.com"}}
+     - "open Google" → {{"type": "open_url", "url": "google.com"}}
+     - "open Google Gemini" → {{"type": "open_url", "url": "gemini.google.com"}}
+     - "go to Jira" → {{"type": "open_url", "url": "jira.com"}}
+   - This automatically opens in the default browser
+
+3. HOW TO DISTINGUISH:
+   - Websites: YouTube, Google, Facebook, Twitter, Jira, Google Gemini, etc. → use "open_url"
+   - Applications: Calculator, TextEdit, Safari, Chrome, Finder → use "open_app"
+   - If it's a well-known website/service, it's probably a website, not an app
+
+4. CRITICAL RULES FOR WEBSITES:
+   - DO NOT click on bookmarks, links, or browser UI elements
+   - DO NOT try to navigate through browser menus
+   - DO NOT search for the website in address bar
+   - ALWAYS use open_url directly - it's the simplest and most reliable method
+
+5. NEVER use Command+Shift+A, Command+Space, or clicking Dock icons - use open_app or open_url instead
+
+COORDINATE PRECISION:
+- When clicking on UI elements, ALWAYS click on the CENTER of the visible element, not the edges.
+- Look carefully at the screenshot to identify the exact center of the target element (button, icon, text field, etc.).
+- For buttons/icons: click the center of the visible button/icon area.
+- For text fields: click the center of the input field, not the label.
+- For menu items: click the center of the text/icon of the menu item.
+
+FINDING SEARCH BARS AND INPUT FIELDS (CRITICAL - BE PRECISE):
+- Search bars are usually large rectangular boxes, often in the center or top of the page
+- On Google homepage: The search box is a LARGE rounded rectangle in the CENTER of the page, below the Google logo
+  - It's typically 400-600 pixels wide, 40-50 pixels tall
+  - Usually positioned at approximately: x = screen_width/2, y = screen_height/2 or slightly above
+  - Look for a white or light gray rounded rectangle with a shadow
+  - May have placeholder text "Search Google" or a search icon inside
+  - Click on the CENTER of this rectangle (not on the icon, not on the edges)
+- On YouTube: The search box is at the TOP of the page, in the header area
+  - Usually positioned at: x = screen_width/2, y = 50-100 pixels from top
+  - Look for a rectangular input field with "Search" placeholder
+- General rules:
+  - Search bars are usually the LARGEST input field visible on the page
+  - They're often in the center (for homepages) or top (for navigation)
+  - Look for rounded corners, shadows, or distinctive styling
+  - If you see placeholder text like "Search", "Search Google", "Search YouTube" → that's the search box
+  - Click on the CENTER of the visible search box rectangle
+  - Use confidence 0.8-0.9 if you can clearly see the search box boundaries
+  - Use confidence 0.6-0.7 if you're estimating based on typical layout
+  - If confidence is below 0.6, try to identify the search box more carefully before clicking
+
+DOCK ON macOS:
+- The Dock is ALWAYS at the bottom of the screen (or left/right if positioned there).
+- Dock icons are visible as small icons in a bar at the bottom.
+- If you need to click a Dock icon but don't see it clearly:
+  - Look for the Dock bar at the bottom of the screen
+  - Safari icon is typically a blue compass icon
+  - Click on the center of the icon you can identify
+  - If the specific icon is not clearly visible, scan the Dock from left to right and click on icons that might match
+  - Set confidence based on how clearly you can see the icon (0.6-0.9 if you can see a similar icon, 0.3-0.5 if you're estimating)
+- If confidence is below 0.5, the action will be skipped - so try to identify the icon visually first.
 
 Return ONLY a single JSON action object — no markdown fences, no extra text:
-{{"type": "click|type|key_combo|scroll|double_click|move|wait", "x": <int>, "y": <int>, "text": "<string>", "keys": ["<key>", ...], "direction": "up|down", "amount": <int>, "seconds": <float>, "confidence": <0.0-1.0>, "reason": "<why>"}}
+{{"type": "click|type|key_combo|scroll|double_click|move|wait|open_app|open_url", "x": <int>, "y": <int>, "text": "<string>", "keys": ["<key>", ...], "direction": "up|down", "amount": <int>, "seconds": <float>, "app_name": "<string>", "url": "<string>", "confidence": <0.0-1.0>, "reason": "<why>"}}
+
+For opening:
+- Applications: {{"type": "open_app", "app_name": "Calculator"}}
+- Websites: {{"type": "open_url", "url": "youtube.com"}}
 
 Include only the fields relevant to the chosen action type.
-Set "confidence" to reflect how certain you are about the coordinates/target.
+Set "confidence" to reflect how certain you are about the coordinates/target. If coordinates are uncertain, use confidence < 0.8.
 """
 
 VERIFY_PROMPT = """\
-You are a desktop automation verifier.
+You are a desktop automation verifier. Your job is to determine if a task step has been successfully completed.
 
-Look ONLY at the AFTER screenshot. Is the expected result currently visible \
-and true on screen? Do not require a visual change — the state may have already \
-been achieved. Answer based solely on what you see in the AFTER screenshot.
+CRITICAL RULES:
+1. Look ONLY at the AFTER screenshot. The BEFORE screenshot is for context only.
+2. Do NOT require a visual change — the state may have already been achieved before the action.
+3. Answer based SOLELY on what you see in the AFTER screenshot.
+4. Be GENEROUS with success — if the goal is achieved, mark success=true even if the method was different.
 
 The expected result is:
   "{expected_result}"
 
+VERIFICATION LOGIC BY TASK TYPE:
+
+1. OPENING APPLICATIONS/WEBSITES:
+   - Success = true if the application/website is open and visible on screen
+   - Look for: application window, website content, browser tab with the site
+   - Example: "Calculator is open" → success=true if Calculator window is visible
+   - Example: "Google is open" → success=true if Google homepage or search page is visible
+
+2. SEARCH TASKS:
+   - If expected result mentions "search results" or "results are displayed":
+     - Success = true if you see ANY search results (links, snippets, videos, thumbnails)
+     - On Google: Look for blue links, snippets, "About X results", or search query in URL
+     - On YouTube: Look for video thumbnails, video titles, or search query visible
+     - If results page is visible → success=true (the search worked)
+   - If expected result mentions "search bar" or "search box":
+     - Success = true if search bar is visible (doesn't need text, just needs to be there)
+   - If expected result mentions "search query appears":
+     - Success = true if the query text is visible in search bar OR in results
+
+3. TYPING TASKS:
+   - Success = true if the text appears in the target field OR the action that should happen after typing occurred
+   - Example: "Type 'Gemini' into search bar" → success=true if text is in search bar OR search was executed
+   - Example: "Type 'Hello' into text field" → success=true if "Hello" appears in the field
+
+4. CLICKING TASKS:
+   - Success = true if the expected outcome is visible (button clicked → page changed, menu opened, etc.)
+   - Don't just check if button was clicked — check if the RESULT of clicking is visible
+
+5. COMPLETION INDICATORS:
+   - If you see the final desired state (results, opened app, filled form, etc.) → success=true
+   - If the task goal is achieved, mark success=true regardless of intermediate steps
+   - When in doubt, ask: "Is the user's goal achieved?" If yes → success=true
+
+COMMON SUCCESS PATTERNS:
+- "X is open" → X window/page is visible → success=true
+- "Search results for X" → Results page with X-related content → success=true
+- "X appears" → X is visible on screen → success=true
+- "X is displayed" → X content is visible → success=true
+- "Navigate to X" → X page/site is visible → success=true
+
 Return ONLY a JSON object — no markdown fences, no extra text:
 {{"success": <true|false>, "description": "<what you see in the AFTER screenshot relevant to the expected result>", "confidence": <0.0-1.0>}}
 
-"success" is true if the expected result is currently present on screen, regardless of whether it changed.
+"success" is true if the expected result is currently present on screen, regardless of how it got there.
+Be GENEROUS — if the goal is achieved, mark success=true.
 """
 
 ALTERNATIVE_ACTION_PROMPT = """\
-You are a desktop automation agent. Look at the current screenshot.
+You are a desktop automation agent running on macOS. Look at the current screenshot.
 
 I tried to: {description}
 I expected: {expected_result}
@@ -104,8 +315,66 @@ It failed because: {failure_description}
 
 Look at the current screen and suggest a completely different approach to achieve the same goal.
 
+IMPORTANT FOR TYPING:
+- For tasks that say "Type X into Y", return a "type" action with both coordinates (x, y) of the input field AND the "text" field.
+- Example: {{"type": "type", "x": 430, "y": 55, "text": "Google Gemini", "confidence": 0.9, "reason": "Typing into address bar"}}
+- The executor will automatically click on the field, select all text, then type the new text.
+
+IMPORTANT FOR OPENING:
+- If the goal is to open a WEBSITE (YouTube, Google, Jira, Facebook, Google Gemini, etc.), use {{"type": "open_url", "url": "youtube.com"}}
+- If the goal is to open an APPLICATION (Calculator, TextEdit, Safari, Chrome), use {{"type": "open_app", "app_name": "Calculator"}}
+- Websites are services you access through a browser - use open_url
+- Applications are macOS programs - use open_app
+- CRITICAL: For websites, NEVER try to click bookmarks, links, or browser UI - ALWAYS use open_url directly
+- For Google services: "Google Gemini" → "gemini.google.com", "Google" → "google.com"
+
+COORDINATE PRECISION:
+- When clicking on UI elements, ALWAYS click on the CENTER of the visible element, not the edges.
+- Look carefully at the screenshot to identify the exact center of the target element.
+- If you're not 100% certain about coordinates, set confidence < 0.8.
+- For buttons/icons: click the center of the visible button/icon area.
+- For text fields: click the center of the input field.
+- For menu items: click the center of the text/icon of the menu item.
+
+FINDING SEARCH BARS AND INPUT FIELDS (CRITICAL - BE PRECISE):
+- Search bars are usually large rectangular boxes, often in the center or top of the page
+- On Google homepage: The search box is a LARGE rounded rectangle in the CENTER of the page, below the Google logo
+  - It's typically 400-600 pixels wide, 40-50 pixels tall
+  - Usually positioned at approximately: x = screen_width/2, y = screen_height/2 or slightly above
+  - Look for a white or light gray rounded rectangle with a shadow
+  - May have placeholder text "Search Google" or a search icon inside
+  - Click on the CENTER of this rectangle (not on the icon, not on the edges)
+  - Typical coordinates for 1920x1080 screen: x = 960, y = 400-500
+  - Typical coordinates for 1440x900 screen: x = 720, y = 350-450
+- On YouTube: The search box is at the TOP of the page, in the header area
+  - Usually positioned at: x = screen_width/2, y = 50-100 pixels from top
+  - Look for a rectangular input field with "Search" placeholder
+- General rules:
+  - Search bars are usually the LARGEST input field visible on the page
+  - They're often in the center (for homepages) or top (for navigation)
+  - Look for rounded corners, shadows, or distinctive styling
+  - If you see placeholder text like "Search", "Search Google", "Search YouTube" → that's the search box
+  - Click on the CENTER of the visible search box rectangle
+  - Use confidence 0.8-0.9 if you can clearly see the search box boundaries
+  - Use confidence 0.6-0.7 if you're estimating based on typical layout
+  - If confidence is below 0.6, try to identify the search box more carefully before clicking
+- ALTERNATIVE METHOD if search box is hard to find:
+  - On Google: You can press Tab key multiple times to navigate to the search box, then type
+  - But clicking is preferred if you can see the search box clearly
+
+OPENING APPLICATIONS vs WEBSITES:
+- For APPLICATIONS (Calculator, TextEdit, Safari, Chrome): Use {{"type": "open_app", "app_name": "Calculator"}}
+- For WEBSITES (YouTube, Google, Jira, Facebook): Use {{"type": "open_url", "url": "youtube.com"}}
+- Websites are services like YouTube, Google, Jira - use open_url, not open_app
+- Applications are macOS apps like Calculator, TextEdit - use open_app
+- NEVER use Command+Shift+A, Command+Space, or clicking Dock icons - use open_app or open_url instead
+
 Return ONLY a single JSON action object — no markdown fences, no extra text:
-{{"type": "click|type|key_combo|scroll|double_click|move|wait", "x": <int>, "y": <int>, "text": "<string>", "keys": ["<key>", ...], "direction": "up|down", "amount": <int>, "seconds": <float>, "confidence": <0.0-1.0>, "reason": "<why>"}}
+{{"type": "click|type|key_combo|scroll|double_click|move|wait|open_app|open_url", "x": <int>, "y": <int>, "text": "<string>", "keys": ["<key>", ...], "direction": "up|down", "amount": <int>, "seconds": <float>, "app_name": "<string>", "url": "<string>", "confidence": <0.0-1.0>, "reason": "<why>"}}
+
+For opening:
+- Applications: {{"type": "open_app", "app_name": "Calculator"}}
+- Websites: {{"type": "open_url", "url": "youtube.com"}}
 
 Include only the fields relevant to the chosen action type.
 """
@@ -512,13 +781,13 @@ class TaskOrchestrator:
                             last_failure,
                         )
 
-            # ── TIER 1: wait 2s, retry same action ──────────────────────
+            # ── TIER 1: wait 1s, retry same action ──────────────────────
             if not success and action is not None:
                 logger.info(
-                    "[run]   [TIER 1] Step %d — waiting 2s then retrying same action...",
+                    "[run]   [TIER 1] Step %d — waiting 1s then retrying same action...",
                     step_num,
                 )
-                time.sleep(2)
+                time.sleep(1)  # Reduced from 2s to 1s for faster execution
 
                 logger.info("[run]   [TIER 1] Capturing before-screenshot...")
                 t1_before_b64 = capture_frame_b64()
@@ -756,16 +1025,52 @@ class TaskOrchestrator:
         # ── Step 3: determine final status ───────────────────────────────
         if self.state["status"] == "running":
             failed_count = len(self.state["steps_failed"])
-            if failed_count == 0:
-                self.state["status"] = "completed"
-            elif failed_count < len(steps):
-                self.state["status"] = "completed"   # partial success
-                logger.warning(
-                    "[run] Task finished with %d failed step(s) out of %d.",
-                    failed_count, len(steps),
-                )
-            else:
-                self.state["status"] = "failed"
+            completed_count = len(self.state["steps_completed"])
+            
+            # Final verification: check if the goal was actually achieved
+            # Capture a final screenshot and ask Gemini if the goal is complete
+            logger.info("[run] Performing final goal verification...")
+            final_b64 = capture_frame_b64()
+            try:
+                final_check_prompt = f"""Look at this screenshot. The user's goal was: "{self.goal}"
+
+Is this goal currently achieved? Look for:
+- If goal was to open something: is it open and visible?
+- If goal was to search: are search results visible?
+- If goal was to type something: is the text visible?
+- If goal was to click something: did the expected result happen?
+
+Return ONLY a JSON object: {{"goal_achieved": <true|false>, "reason": "<brief explanation>"}}"""
+                
+                final_response = self._gemini_call([final_check_prompt, _inline_image(final_b64)])
+                final_check = _extract_json(final_response.text, label="final_check")
+                
+                if final_check.get("goal_achieved", False):
+                    logger.info("[run] Final verification: Goal achieved! %s", final_check.get("reason", ""))
+                    self.state["status"] = "completed"
+                elif failed_count == 0:
+                    self.state["status"] = "completed"
+                elif failed_count < len(steps) and completed_count > 0:
+                    self.state["status"] = "completed"   # partial success
+                    logger.warning(
+                        "[run] Task finished with %d failed step(s) out of %d.",
+                        failed_count, len(steps),
+                    )
+                else:
+                    self.state["status"] = "failed"
+            except Exception as exc:
+                logger.warning("[run] Final verification failed, using step-based logic: %s", exc)
+                # Fallback to step-based logic
+                if failed_count == 0:
+                    self.state["status"] = "completed"
+                elif failed_count < len(steps) and completed_count > 0:
+                    self.state["status"] = "completed"   # partial success
+                    logger.warning(
+                        "[run] Task finished with %d failed step(s) out of %d.",
+                        failed_count, len(steps),
+                    )
+                else:
+                    self.state["status"] = "failed"
 
         self.state["current_step"] = None
         logger.info(
