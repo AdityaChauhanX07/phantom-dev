@@ -19,6 +19,7 @@ import asyncio
 import json
 import logging
 import os
+import ssl
 
 import websockets
 from dotenv import load_dotenv
@@ -73,7 +74,19 @@ class PhantomWSClient:
 
         for attempt in range(1, _MAX_RETRIES + 1):
             try:
-                self.websocket = await websockets.connect(self.url)
+                # Create SSL context for wss:// connections
+                ssl_context = None
+                if self.url.startswith("wss://"):
+                    ssl_context = ssl.create_default_context()
+                    # For Cloud Run, we may need to disable certificate verification
+                    # (Cloud Run uses Google-managed certificates)
+                    ssl_context.check_hostname = False
+                    ssl_context.verify_mode = ssl.CERT_NONE
+                
+                self.websocket = await websockets.connect(
+                    self.url,
+                    ssl=ssl_context
+                )
                 self.connected = True
                 logger.info("[PhantomWSClient] Connected to agent at %s", self.url)
                 self._listener_task = asyncio.create_task(

@@ -201,6 +201,9 @@
 
       if (!res.ok) {
         log('STT error from /stt-task: ' + (data.message || res.status), 'ev-error');
+        // Re-enable microphone button so user can retry
+        micBtn.disabled = false;
+        labelEl.textContent = 'Press mic and say "Hey Phantom, [your task]"';
         return;
       }
 
@@ -208,10 +211,18 @@
       const taskId = data.task_id || '(no task_id)';
       log(`HTTP TASK DETECTED: ${goal} (task_id=${taskId})`, 'ev-task');
       labelEl.textContent = 'Task sent to agent!';
+      
+      // Re-enable microphone button for next command
+      micBtn.disabled = false;
+      labelEl.textContent = 'Press mic and say "Hey Phantom, [your task]"';
     } catch (e) {
       log('STT request failed (network or CORS): ' + e.message, 'ev-error');
       statusEl.textContent = 'Error talking to STT service';
       statusEl.className = 'error';
+      
+      // Re-enable microphone button even on error so user can retry
+      micBtn.disabled = false;
+      labelEl.textContent = 'Press mic and say "Hey Phantom, [your task]"';
     }
   }
 
