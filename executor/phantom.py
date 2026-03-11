@@ -116,67 +116,74 @@ class PhantomExecutor:
         """
         Connect to the agent backend and execute tasks received over WebSocket.
 
-        Runs until a ``"shutdown"`` message is received or the connection drops.
+        Reconnects automatically if the connection drops.  Exits cleanly on a
+        ``"shutdown"`` message or ``KeyboardInterrupt``.
         """
-        await self.ws.connect()
         self.running = True
-        logger.info("[PhantomExecutor] Phantom is online. Waiting for tasks...")
 
-        try:
-            while self.running:
-                # Block until any message arrives (no timeout — agent drives pacing)
-                try:
-                    message = await asyncio.wait_for(
-                        self.ws._inbox.get(), timeout=60.0
-                    )
-                except asyncio.TimeoutError:
-                    # Heartbeat gap — check connection state and loop back
-                    if not self.ws.connected:
-                        logger.warning(
-                            "[PhantomExecutor] WebSocket disconnected during wait. Stopping."
+        while self.running:
+            try:
+                await self.ws.connect()
+                logger.info("[PhantomExecutor] Phantom is online. Waiting for tasks...")
+
+                while self.running:
+                    # Block until any message arrives
+                    try:
+                        message = await asyncio.wait_for(
+                            self.ws._inbox.get(), timeout=60.0
                         )
-                        break
-                    continue
-
-                msg_type = message.get("type")
-
-                if msg_type == "task":
-                    task_id = message["task_id"]
-                    goal = message["goal"]
-                    if not goal:
-                        logger.warning(
-                            "[PhantomExecutor] Received task message with no goal: %s",
-                            json.dumps(message),
-                        )
+                    except asyncio.TimeoutError:
+                        if not self.ws.connected:
+                            logger.warning(
+                                "[PhantomExecutor] WebSocket disconnected during wait."
+                            )
+                            break
                         continue
 
-                    logger.info("[PhantomExecutor] Received task: %r", goal)
-                    self.current_task = goal
+                    msg_type = message.get("type")
 
-                    orchestrator = TaskOrchestrator(goal)
-                    final_state = orchestrator.run()   # sync — runs in the event loop thread
-                    _print_state_summary(final_state)
-                    self.current_task = None
+                    if msg_type == "task":
+                        task_id = message["task_id"]
+                        goal = message["goal"]
+                        if not goal:
+                            logger.warning(
+                                "[PhantomExecutor] Received task message with no goal: %s",
+                                json.dumps(message),
+                            )
+                            continue
 
-                    await self.ws.send_task_result(
-                        task_id=task_id,
-                        status=final_state.get("status", "failed"),
-                        goal=final_state.get("goal", ""),
-                    )
+                        logger.info("[PhantomExecutor] Received task: %r", goal)
+                        self.current_task = goal
 
-                elif msg_type == "shutdown":
-                    logger.info("[PhantomExecutor] Shutdown command received.")
-                    self.running = False
-                    break
+                        orchestrator = TaskOrchestrator(goal)
+                        final_state = orchestrator.run()   # sync — runs in the event loop thread
+                        _print_state_summary(final_state)
+                        self.current_task = None
 
-                else:
-                    logger.debug(
-                        "[PhantomExecutor] Ignoring unknown message type: %r", msg_type
-                    )
+                        await self.ws.send_task_result(
+                            task_id=task_id,
+                            status=final_state.get("status", "failed"),
+                            goal=final_state.get("goal", ""),
+                        )
 
-        finally:
-            self.running = False
-            await self.ws.disconnect()
+                    elif msg_type == "shutdown":
+                        logger.info("[PhantomExecutor] Shutdown command received.")
+                        self.running = False
+                        break
+
+                    else:
+                        logger.debug(
+                            "[PhantomExecutor] Ignoring unknown message type: %r", msg_type
+                        )
+
+            except Exception as exc:
+                logger.warning("[PhantomExecutor] Connection error: %s", exc)
+            finally:
+                await self.ws.disconnect()
+
+            if self.running:
+                logger.info("[PhantomExecutor] Reconnecting in 3 s...")
+                await asyncio.sleep(3)
 
     # ------------------------------------------------------------------ #
     # Entry point                                                          #
