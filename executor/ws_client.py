@@ -55,6 +55,7 @@ class PhantomWSClient:
         self.connected: bool = False
         self._inbox: asyncio.Queue = asyncio.Queue()
         self._listener_task: asyncio.Task | None = None
+        self._heartbeat_task: asyncio.Task | None = None
         logger.debug("[PhantomWSClient] Target URL: %s", self.url)
 
     # ------------------------------------------------------------------ #
@@ -78,6 +79,9 @@ class PhantomWSClient:
                 self._listener_task = asyncio.create_task(
                     self._listen(), name="ws_listener"
                 )
+                self._heartbeat_task = asyncio.create_task(
+                    self._heartbeat(), name="ws_heartbeat"
+                )
                 return
             except Exception as exc:
                 last_exc = exc
@@ -100,12 +104,13 @@ class PhantomWSClient:
 
     async def disconnect(self) -> None:
         """Close the WebSocket connection gracefully."""
-        if self._listener_task and not self._listener_task.done():
-            self._listener_task.cancel()
-            try:
-                await self._listener_task
-            except asyncio.CancelledError:
-                pass
+        for task in (self._listener_task, self._heartbeat_task):
+            if task and not task.done():
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
 
         if self.websocket is not None:
             try:
@@ -145,6 +150,18 @@ class PhantomWSClient:
             logger.warning("[PhantomWSClient._listen] Unexpected error: %s", exc)
         finally:
             self.connected = False
+
+    async def _heartbeat(self) -> None:
+        """Background task — sends a ping every 30 s to keep the connection alive."""
+        while self.connected:
+            await asyncio.sleep(30)
+            try:
+                await self.websocket.ping()
+                logger.debug("[PhantomWSClient] Heartbeat ping sent.")
+            except Exception:
+                logger.warning("[PhantomWSClient] Heartbeat failed — connection lost.")
+                self.connected = False
+                break
 
     # ------------------------------------------------------------------ #
     # Outbound messages                                                    #
