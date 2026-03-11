@@ -125,11 +125,12 @@ def _extract_json(text: str, label: str = "") -> dict | list:
     """
     stripped = text.strip()
 
-    # 1. Bare JSON
-    try:
-        return json.loads(stripped)
-    except json.JSONDecodeError:
-        pass
+    # 1. Bare JSON — only attempt if it looks like a JSON value
+    if stripped.startswith(("[", "{")):
+        try:
+            return json.loads(stripped)
+        except json.JSONDecodeError:
+            pass
 
     # 2. Markdown fences
     fenced = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", stripped)
@@ -139,13 +140,15 @@ def _extract_json(text: str, label: str = "") -> dict | list:
         except json.JSONDecodeError:
             pass
 
-    # 3. First {...} or [...] block
-    block = re.search(r"(\{[\s\S]*?\}|\[[\s\S]*?\])", stripped)
-    if block:
-        try:
-            return json.loads(block.group(0))
-        except json.JSONDecodeError:
-            pass
+    # 3. First '['/'{' to last ']'/'}' — handles arrays/objects embedded in prose
+    for open_ch, close_ch in (("[", "]"), ("{", "}")):
+        start = stripped.find(open_ch)
+        end = stripped.rfind(close_ch)
+        if start != -1 and end > start:
+            try:
+                return json.loads(stripped[start : end + 1])
+            except json.JSONDecodeError:
+                pass
 
     raise ValueError(
         f"[{label}] Could not extract JSON from model response.\n"
