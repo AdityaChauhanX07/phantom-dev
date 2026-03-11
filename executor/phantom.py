@@ -176,7 +176,7 @@ class PhantomExecutor:
                             "[PhantomExecutor] Ignoring unknown message type: %r", msg_type
                         )
 
-            except Exception as exc:
+            except (Exception, asyncio.CancelledError) as exc:
                 logger.warning("[PhantomExecutor] Connection error: %s", exc)
             finally:
                 await self.ws.disconnect()
