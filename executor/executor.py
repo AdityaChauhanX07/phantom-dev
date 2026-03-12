@@ -11,12 +11,15 @@ Action format (flat, no nested "params" key):
     {"type": "move",         "x": 500, "y": 300}
     {"type": "wait",         "seconds": 1.5}
     {"type": "screenshot",   "reason": "verify state"}
+    {"type": "open_app",     "app_name": "Calculator"}
+    {"type": "open_url",     "url": "https://youtube.com"}
 
 Optional field on any action:
     "confidence": 0.0–1.0   — skipped with a warning if below CONFIDENCE_THRESHOLD
 """
 
 import logging
+import subprocess
 import time
 from typing import Any
 
@@ -38,8 +41,8 @@ pyautogui.PAUSE = 0.05
 # Constants
 # ---------------------------------------------------------------------------
 
-CONFIDENCE_THRESHOLD = 0.75
-SETTLE_DELAY = 0.5          # seconds to wait after every action except wait/screenshot
+CONFIDENCE_THRESHOLD = 0.3  # Lowered to 0.3 for testing - allows actions even when element visibility is uncertain
+SETTLE_DELAY = 0.2          # Reduced from 0.5 to 0.2 seconds for faster execution
 NO_SETTLE = {"wait", "screenshot"}
 
 
@@ -92,10 +95,20 @@ def _handle_double_click(action: dict) -> dict:
 
 def _handle_type(action: dict) -> dict:
     text = action["text"]
+    # If coordinates are provided, click on the field first to focus it
+    if "x" in action and "y" in action:
+        x, y = action["x"], action["y"]
+        logger.info("Clicking on input field at (%d, %d) before typing...", x, y)
+        pyautogui.click(x, y)
+        time.sleep(0.1)  # Brief pause for field to focus
+        # Select all existing text (Cmd+A) before typing new text
+        pyautogui.hotkey("ctrl", "a")
+        time.sleep(0.05)
+
     # typewrite is ASCII-safe; use pyperclip+paste for unicode if needed
     interval = action.get("interval", 0.05)
     pyautogui.typewrite(text, interval=interval)
-    return {"text": text}
+    return {"text": text, "x": action.get("x"), "y": action.get("y")}
 
 
 def _handle_key_combo(action: dict) -> dict:
@@ -148,6 +161,93 @@ def _handle_screenshot(action: dict) -> dict:
     return {"reason": reason, "screenshot_b64_length": len(b64), "screenshot_b64": b64}
 
 
+def _handle_open_app(action: dict) -> dict:
+    """
+    Open an application by name using macOS 'open -a' command.
+    This is more reliable than clicking Dock icons.
+    
+    Args:
+        action: {"type": "open_app", "app_name": "Calculator"}
+    
+    Returns:
+        {"app_name": str, "success": bool}
+    """
+    app_name = action.get("app_name", "")
+    if not app_name:
+        raise ValueError("'app_name' is required for 'open_app' action")
+    
+    logger.info("Opening application: %s", app_name)
+    try:
+        # Use 'open -a' command to launch the app
+        result = subprocess.run(
+            ["open", "-a", app_name],
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+        if result.returncode == 0:
+            logger.info("Successfully opened: %s", app_name)
+            # Wait a bit for the app to launch
+            time.sleep(1.0)
+            return {"app_name": app_name, "success": True}
+        else:
+            error_msg = result.stderr.strip() or "Unknown error"
+            logger.warning("Failed to open %s: %s", app_name, error_msg)
+            return {"app_name": app_name, "success": False, "error": error_msg}
+    except subprocess.TimeoutExpired:
+        logger.warning("Timeout opening %s", app_name)
+        return {"app_name": app_name, "success": False, "error": "Timeout"}
+    except Exception as exc:
+        logger.error("Error opening %s: %s", app_name, exc)
+        return {"app_name": app_name, "success": False, "error": str(exc)}
+
+
+def _handle_open_url(action: dict) -> dict:
+    """
+    Open a URL in the default browser using macOS 'open' command.
+    This works for any website: youtube.com, google.com, jira.com, etc.
+    
+    Args:
+        action: {"type": "open_url", "url": "https://youtube.com"}
+               or {"type": "open_url", "url": "youtube.com"} (https:// will be added)
+    
+    Returns:
+        {"url": str, "success": bool}
+    """
+    url = action.get("url", "")
+    if not url:
+        raise ValueError("'url' is required for 'open_url' action")
+    
+    # Add https:// if not present
+    if not url.startswith(("http://", "https://")):
+        url = "https://" + url
+    
+    logger.info("Opening URL: %s", url)
+    try:
+        # Use 'open' command to open URL in default browser
+        result = subprocess.run(
+            ["open", url],
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+        if result.returncode == 0:
+            logger.info("Successfully opened URL: %s", url)
+            # Wait a bit for the browser to load
+            time.sleep(2.0)
+            return {"url": url, "success": True}
+        else:
+            error_msg = result.stderr.strip() or "Unknown error"
+            logger.warning("Failed to open URL %s: %s", url, error_msg)
+            return {"url": url, "success": False, "error": error_msg}
+    except subprocess.TimeoutExpired:
+        logger.warning("Timeout opening URL %s", url)
+        return {"url": url, "success": False, "error": "Timeout"}
+    except Exception as exc:
+        logger.error("Error opening URL %s: %s", url, exc)
+        return {"url": url, "success": False, "error": str(exc)}
+
+
 # ---------------------------------------------------------------------------
 # Dispatch table
 # ---------------------------------------------------------------------------
@@ -161,6 +261,8 @@ _HANDLERS: dict[str, Any] = {
     "move":         _handle_move,
     "wait":         _handle_wait,
     "screenshot":   _handle_screenshot,
+    "open_app":     _handle_open_app,
+    "open_url":     _handle_open_url,
 }
 
 

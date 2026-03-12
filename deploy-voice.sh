@@ -23,7 +23,7 @@ gcloud run deploy ${SERVICE_NAME} \
   --region=${REGION} \
   --allow-unauthenticated \
   --port=8000 \
-  --set-env-vars="GEMINI_API_KEY=${GEMINI_API_KEY},AGENT_URL=https://phantom-agent-874381233509.us-central1.run.app,GCP_PROJECT_ID=${PROJECT_ID}" \
+  --set-env-vars="GEMINI_API_KEY=${GEMINI_API_KEY},AGENT_URL=https://phantom-agent-874381233509.us-central1.run.app,GCP_PROJECT_ID=${PROJECT_ID},GCP_LOCATION=${REGION},TEXT_MODEL=gemini-2.5-flash,LIVE_MODEL=gemini-2.5-flash-native-audio-preview-12-2025,LOG_LEVEL=INFO" \
   --project=${PROJECT_ID}
 
 echo "✅ Voice gateway deployed!"
