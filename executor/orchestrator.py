@@ -55,6 +55,14 @@ IMPORTANT: Before planning any steps, check the current screen state carefully.
 If an application is already open and visible on screen, do NOT include a step
 to open it. Start from the current screen state and work forward from there.
 
+IMPORTANT: Break the goal into DETAILED, GRANULAR steps. Each step should be \
+ONE single action (one click, one navigation, one data entry). \
+For a task involving Jira → Sheets → Slack, you must produce AT MINIMUM 15 steps:
+- Steps to read each Jira ticket (navigate, screenshot, read data)
+- Steps to open Sheets and enter each row of data
+- Steps to open Slack and post the summary message
+Do NOT summarize multiple actions into one step. Each atomic action is its own step.
+
 Look at the current screenshot and break the goal into ordered, atomic sub-steps.
 Return ONLY a JSON array — no markdown fences, no extra text:
 
