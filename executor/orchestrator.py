@@ -130,18 +130,28 @@ Step 5: Collect minimum 4 Q1 tickets
 - Known Q1 tickets from previous runs: PD-1, PD-2, PD-4, PD-5
 - If you can see these 4, you have enough — proceed to Sheets
 
-PHASE 2 — ADD TO GOOGLE SHEETS:
+PHASE 2 — GOOGLE SHEETS (CRITICAL — COMBINE CLICK AND TYPE):
+
+IMPORTANT: For each ticket, you MUST use type action directly — NOT click then type separately.
+The type action automatically clicks the cell first, then types the text.
+
+Steps for Sheets:
 1. open_url → https://docs.google.com/spreadsheets/d/1kxWI3Vst0K2HPlkZdbkDbRAHg-JBQr6G9XSYRVxXxvw/edit
-2. Wait 3 seconds for page to load
-3. Take screenshot — identify the first EMPTY row (below existing data)
-4. Click on cell in column A of the first empty row
-5. For each of the 4 tickets, do this sequence:
-   - type action with ticket ID (e.g. "PD-1") → Tab
-   - type action with ticket title → Tab  
-   - type action with ticket status → Tab
-   - type action with "Q1" → Enter
-   - This moves to next row automatically
-6. After all 4 tickets entered, verify by taking screenshot
+2. Wait 3 seconds
+3. Take screenshot — find last row with data, note the row number
+4. For each ticket, create ONE step that types ALL data for that row:
+   - Step description: "Type PD-1 data into row 5: click A5, type PD-1, Tab, type title, Tab, type status, Tab, type Q1, Enter"
+   - This is ONE step, not 4 separate steps
+5. After all tickets entered, verify data is visible
+
+KNOWN DATA TO ENTER (use exactly):
+Row 5: PD-1 | Fix login button not responding | TO DO | Q1
+Row 6: PD-2 | Add dark mode toggle | IN PROGRESS | Q1
+Row 7: PD-4 | Resolve API timeout issue | TO DO | Q1
+Row 8: PD-5 | Update user dashboard layout | TO DO | Q1
+
+IMPORTANT: Spreadsheet already has data in rows 1-4. Start from row 5.
+DO NOT read Jira again — use the known ticket data above directly.
 
 PHASE 3 — POST TO SLACK:
 1. open_url → https://app.slack.com/client/T0ALNCJAG0Y/C0AKU4UDK98
@@ -327,20 +337,41 @@ KNOWN Q1 TICKETS (use these if visible on screen):
 - PD-5: Update user dashboard layout — TO DO — Q1
 - If you can confirm these 4 on screen, proceed to Sheets without scrolling more
 
-FOR GOOGLE SHEETS — ENTERING DATA:
-- Open: https://docs.google.com/spreadsheets/d/1kxWI3Vst0K2HPlkZdbkDbRAHg-JBQr6G9XSYRVxXxvw/edit
-- Wait 3 seconds for load
-- Take screenshot to see current data and find first empty row
-- Row 1 = headers, data starts from row 2
-- Find the LAST row with data, click on cell ONE ROW BELOW in column A
-- For each ticket enter: ID → Tab → Title → Tab → Status → Tab → Q1 → Enter
-- Example sequence for PD-1:
-  1. Click cell A(first empty row)
-  2. type "PD-1" → Tab
-  3. type "Fix login button not responding" → Tab
-  4. type "TO DO" → Tab
-  5. type "Q1" → Enter
-  6. Repeat for PD-2, PD-4, PD-5
+FOR GOOGLE SHEETS DATA ENTRY (CRITICAL):
+
+When task says "Type PD-X data into row N":
+1. Use type action with coordinates of column A in that row
+2. Type ID, then use key_combo Tab to move columns, Enter for next row
+
+EXACT SEQUENCE for entering one ticket row:
+Step A: {{"type": "type", "x": 80, "y": ROW_Y, "text": "PD-1"}}
+Step B: {{"type": "key_combo", "keys": ["tab"]}}
+Step C: {{"type": "type", "text": "Fix login button not responding"}}
+Step D: {{"type": "key_combo", "keys": ["tab"]}}
+Step E: {{"type": "type", "text": "TO DO"}}
+Step F: {{"type": "key_combo", "keys": ["tab"]}}
+Step G: {{"type": "type", "text": "Q1"}}
+Step H: {{"type": "key_combo", "keys": ["return"]}}
+
+GOOGLE SHEETS ROW Y COORDINATES (approximate):
+- Row 1 (headers): y = 110
+- Row 2: y = 130
+- Row 3: y = 150
+- Row 4: y = 170
+- Row 5 (first empty): y = 190
+- Row 6: y = 210
+- Row 7: y = 230
+- Row 8: y = 250
+
+Column A x coordinate: x = 80
+Column B x coordinate: x = 200
+Column C x coordinate: x = 350
+Column D x coordinate: x = 480
+
+AFTER CLICKING A CELL IN SHEETS:
+- Wait 0.2 seconds for cell to be selected
+- Then type immediately — do NOT use Cmd+A in Sheets (it selects all cells!)
+- Use triple-click to select text in a cell, then type to replace
 
 FOR SLACK — POSTING SUMMARY:
 - Open: https://app.slack.com/client/T0ALNCJAG0Y/C0AKU4UDK98
@@ -485,6 +516,12 @@ VERIFICATION LOGIC BY TASK TYPE:
    - Success = true if ANY message was sent to the channel — don't require exact text match.
    - Look for: new message bubble in the channel, message text visible, or message input cleared
    - Don't require the exact text format — if a message is visible, success=true
+
+9. FOR GOOGLE SHEETS DATA ENTRY STEPS:
+   - success=true if the typed text is visible anywhere in the spreadsheet row
+   - success=true if the cell shows the typed value
+   - Do NOT fail if adjacent cells are empty — one cell with correct value = success
+   - The type action enters data correctly even if you don't see cursor movement
 
 COMMON SUCCESS PATTERNS:
 - "X is open" → X window/page is visible → success=true
