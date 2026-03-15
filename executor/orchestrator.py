@@ -86,6 +86,71 @@ OPENING APPLICATIONS vs WEBSITES (CRITICAL - USE DIRECT METHODS):
    - ALWAYS use open_url directly - it's the simplest and most reliable method
    - If the task says "open [Website]" or "go to [Website]", use open_url with the website domain
 
+BROWSER: Firefox. All sites already logged in. open_url opens new tab in existing Firefox window.
+
+EXACT DEMO URLS:
+- Jira board: https://hegajvova77.atlassian.net/jira/software/projects/PD/boards/2
+- Google Sheets: https://docs.google.com/spreadsheets/d/1kxWI3Vst0K2HPlkZdbkDbRAHg-JBQr6G9XSYRVxXxvw/edit
+- Slack: https://app.slack.com/client/T0ALNCJAG0Y/C0AKU4UDK98
+
+═══════════════════════════════════════════
+STEP-BY-STEP FOR DEMO TASK:
+"Take top 5 Q1 bugs from Jira, add to spreadsheet, post summary in Slack"
+═══════════════════════════════════════════
+
+PHASE 1 — READ JIRA TICKETS:
+1. open_url → https://hegajvova77.atlassian.net/jira/software/projects/PD/boards/2
+2. Wait 3 seconds for page to load
+3. Take a screenshot and READ all visible ticket cards
+4. Jira board shows tickets as cards in columns (To Do, In Progress, Done)
+5. Each card shows: ticket ID (PD-1, PD-2...), title text, sometimes a label badge
+6. Q1 tickets have "Q1" label badge visible on the card
+7. READ the screenshot carefully — extract ticket ID, title, status column for each Q1 ticket
+8. If you can't see Q1 labels on board, try backlog: https://hegajvova77.atlassian.net/jira/software/projects/PD/backlog
+9. Collect exactly 5 tickets with Q1 label
+
+PHASE 2 — ADD TO GOOGLE SHEETS:
+1. open_url → https://docs.google.com/spreadsheets/d/1kxWI3Vst0K2HPlkZdbkDbRAHg-JBQr6G9XSYRVxXxvw/edit
+2. Wait 3 seconds for page to load
+3. Take screenshot — identify the first EMPTY row (below existing data)
+4. Click on cell in column A of the first empty row
+5. For each of the 5 tickets, do this sequence:
+   - type action with ticket ID (e.g. "PD-1") → Tab
+   - type action with ticket title → Tab  
+   - type action with ticket status → Tab
+   - type action with "Q1" → Enter
+   - This moves to next row automatically
+6. After all 5 tickets entered, verify by taking screenshot
+
+PHASE 3 — POST TO SLACK:
+1. open_url → https://app.slack.com/client/T0ALNCJAG0Y/C0AKU4UDK98
+2. Wait 3 seconds for page to load
+3. Take screenshot — find the message input at the BOTTOM of the screen
+4. The input box has placeholder text "Message #channel-name"
+5. Click on the message input box (bottom of screen, approximately y = screen_height - 80)
+6. Type this message (use clipboard paste):
+   "✅ Q1 Bug Report — [date]
+   
+   PD-X: [title] — [status]
+   PD-X: [title] — [status]
+   PD-X: [title] — [status]
+   PD-X: [title] — [status]
+   PD-X: [title] — [status]
+   
+   Added to Bug Tracker spreadsheet."
+7. Press Enter to send
+
+═══════════════════════════════════════════
+IMPORTANT RULES:
+- NEVER try to log in — already authenticated
+- NEVER click "Sign in" or "Log in" buttons
+- If you see a login page, the wrong URL was used — try the exact URL again
+- Take a screenshot after opening each URL to verify correct page loaded
+- Read ticket data directly from screenshots — don't click each ticket to open it
+- In Sheets: use Tab between columns, Enter to go to next row
+- In Slack: use clipboard paste for the full message, then Enter to send
+═══════════════════════════════════════════
+
 5. NEVER use Command+Shift+A, Command+Space, or Finder → Applications - these are too complex and unreliable
 
 Look at the current screenshot and break the goal into ordered, atomic sub-steps.
@@ -204,6 +269,71 @@ OPENING APPLICATIONS vs WEBSITES (CRITICAL - USE DIRECT METHODS):
    - DO NOT try to navigate through browser menus
    - DO NOT search for the website in address bar
    - ALWAYS use open_url directly - it's the simplest and most reliable method
+
+BROWSER: Firefox. All sites already logged in. open_url opens new tab in existing Firefox window.
+
+EXACT DEMO URLS:
+- Jira board: https://hegajvova77.atlassian.net/jira/software/projects/PD/boards/2
+- Google Sheets: https://docs.google.com/spreadsheets/d/1kxWI3Vst0K2HPlkZdbkDbRAHg-JBQr6G9XSYRVxXxvw/edit
+- Slack: https://app.slack.com/client/T0ALNCJAG0Y/C0AKU4UDK98
+
+═══════════════════════════════════════════
+STEP-BY-STEP FOR DEMO TASK:
+"Take top 5 Q1 bugs from Jira, add to spreadsheet, post summary in Slack"
+═══════════════════════════════════════════
+
+PHASE 1 — READ JIRA TICKETS:
+1. open_url → https://hegajvova77.atlassian.net/jira/software/projects/PD/boards/2
+2. Wait 3 seconds for page to load
+3. Take a screenshot and READ all visible ticket cards
+4. Jira board shows tickets as cards in columns (To Do, In Progress, Done)
+5. Each card shows: ticket ID (PD-1, PD-2...), title text, sometimes a label badge
+6. Q1 tickets have "Q1" label badge visible on the card
+7. READ the screenshot carefully — extract ticket ID, title, status column for each Q1 ticket
+8. If you can't see Q1 labels on board, try backlog: https://hegajvova77.atlassian.net/jira/software/projects/PD/backlog
+9. Collect exactly 5 tickets with Q1 label
+
+PHASE 2 — ADD TO GOOGLE SHEETS:
+1. open_url → https://docs.google.com/spreadsheets/d/1kxWI3Vst0K2HPlkZdbkDbRAHg-JBQr6G9XSYRVxXxvw/edit
+2. Wait 3 seconds for page to load
+3. Take screenshot — identify the first EMPTY row (below existing data)
+4. Click on cell in column A of the first empty row
+5. For each of the 5 tickets, do this sequence:
+   - type action with ticket ID (e.g. "PD-1") → Tab
+   - type action with ticket title → Tab  
+   - type action with ticket status → Tab
+   - type action with "Q1" → Enter
+   - This moves to next row automatically
+6. After all 5 tickets entered, verify by taking screenshot
+
+PHASE 3 — POST TO SLACK:
+1. open_url → https://app.slack.com/client/T0ALNCJAG0Y/C0AKU4UDK98
+2. Wait 3 seconds for page to load
+3. Take screenshot — find the message input at the BOTTOM of the screen
+4. The input box has placeholder text "Message #channel-name"
+5. Click on the message input box (bottom of screen, approximately y = screen_height - 80)
+6. Type this message (use clipboard paste):
+   "✅ Q1 Bug Report — [date]
+   
+   PD-X: [title] — [status]
+   PD-X: [title] — [status]
+   PD-X: [title] — [status]
+   PD-X: [title] — [status]
+   PD-X: [title] — [status]
+   
+   Added to Bug Tracker spreadsheet."
+7. Press Enter to send
+
+═══════════════════════════════════════════
+IMPORTANT RULES:
+- NEVER try to log in — already authenticated
+- NEVER click "Sign in" or "Log in" buttons
+- If you see a login page, the wrong URL was used — try the exact URL again
+- Take a screenshot after opening each URL to verify correct page loaded
+- Read ticket data directly from screenshots — don't click each ticket to open it
+- In Sheets: use Tab between columns, Enter to go to next row
+- In Slack: use clipboard paste for the full message, then Enter to send
+═══════════════════════════════════════════
 
 5. NEVER use Command+Shift+A, Command+Space, or clicking Dock icons - use open_app or open_url instead
 
@@ -346,6 +476,21 @@ IMPORTANT FOR OPENING:
 - CRITICAL: For websites, NEVER try to click bookmarks, links, or browser UI - ALWAYS use open_url directly
 - For Google services: "Google Gemini" → "gemini.google.com", "Google" → "google.com"
 
+BROWSER: Firefox. All sites already logged in. open_url opens new tab in existing Firefox window.
+
+EXACT DEMO URLS:
+- Jira board: https://hegajvova77.atlassian.net/jira/software/projects/PD/boards/2
+- Google Sheets: https://docs.google.com/spreadsheets/d/1kxWI3Vst0K2HPlkZdbkDbRAHg-JBQr6G9XSYRVxXxvw/edit
+- Slack: https://app.slack.com/client/T0ALNCJAG0Y/C0AKU4UDK98
+
+IMPORTANT RULES:
+- NEVER try to log in — already authenticated
+- NEVER click "Sign in" or "Log in" buttons
+- Take a screenshot after opening each URL to verify correct page loaded
+- Read ticket data directly from screenshots — don't click each ticket to open it
+- In Sheets: use Tab between columns, Enter to go to next row
+- In Slack: use clipboard paste for the full message, then Enter to send
+
 COORDINATE PRECISION:
 - When clicking on UI elements, ALWAYS click on the CENTER of the visible element, not the edges.
 - Look carefully at the screenshot to identify the exact center of the target element.
@@ -386,6 +531,11 @@ OPENING APPLICATIONS vs WEBSITES:
 - Websites are services like YouTube, Google, Jira - use open_url, not open_app
 - Applications are macOS apps like Calculator, TextEdit - use open_app
 - NEVER use Command+Shift+A, Command+Space, or clicking Dock icons - use open_app or open_url instead
+
+DEMO URLS — use these exact URLs when opening demo apps:
+- Jira: https://hegajvova77.atlassian.net/jira/software/projects/PD/backlog
+- Sheets: https://docs.google.com/spreadsheets/d/1kxWI3Vst0K2HPlkZdbkDbRAHg-JBQr6G9XSYRVxXxvw/edit
+- Slack: https://app.slack.com/client/T0ALNCJAG0Y/C0AKU4UDK98
 
 Return ONLY a single JSON action object — no markdown fences, no extra text:
 {{"type": "click|type|key_combo|scroll|double_click|move|wait|open_app|open_url", "x": <int>, "y": <int>, "text": "<string>", "keys": ["<key>", ...], "direction": "up|down", "amount": <int>, "seconds": <float>, "app_name": "<string>", "url": "<string>", "confidence": <0.0-1.0>, "reason": "<why>"}}

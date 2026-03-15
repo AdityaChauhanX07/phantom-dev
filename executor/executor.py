@@ -96,10 +96,10 @@ def _handle_double_click(action: dict) -> dict:
 def _handle_type(action: dict) -> dict:
     text = action["text"]
     
-    # Force browser focus before typing
+    # Force Firefox focus before typing
     subprocess.run([
         "osascript", "-e",
-        'tell application "System Events" to set frontmost of first process whose name contains "Chrome" to true'
+        'tell application "Firefox" to activate'
     ], capture_output=True)
     time.sleep(0.3)
     
@@ -118,7 +118,7 @@ def _handle_type(action: dict) -> dict:
     pyautogui.hotkey('command', 'v')
     time.sleep(0.2)
     
-    logger.info("Typed text via clipboard: %r", text)
+    logger.info("Typed via clipboard: %r", text)
     return {"text": text, "x": action.get("x"), "y": action.get("y")}
 
 
@@ -215,8 +215,8 @@ def _handle_open_app(action: dict) -> dict:
 
 def _handle_open_url(action: dict) -> dict:
     """
-    Open a URL directly in Google Chrome using AppleScript.
-    This prevents Docker Desktop or other apps from intercepting focus.
+    Open a URL in Firefox as a new tab in existing window.
+    This keeps user sessions active (logged in to Jira, Sheets, Slack).
     
     Args:
         action: {"type": "open_url", "url": "https://youtube.com"}
@@ -232,37 +232,27 @@ def _handle_open_url(action: dict) -> dict:
     if not url.startswith(("http://", "https://")):
         url = "https://" + url
     
-    logger.info("Opening URL: %s", url)
+    logger.info("Opening URL in Firefox: %s", url)
     try:
-        # Open URL directly in Chrome and force focus
+        # Open URL in existing Firefox window as new tab — keeps user logged in
         script = f'''
-tell application "Google Chrome"
+tell application "Firefox"
     activate
-    if (count of windows) = 0 then
-        make new window
-    end if
-    set URL of active tab of front window to "{url}"
+    open location "{url}"
 end tell
 '''
-        result = subprocess.run(
-            ["osascript", "-e", script],
-            capture_output=True,
-            text=True,
-            timeout=10
-        )
+        subprocess.run(["osascript", "-e", script], capture_output=True, timeout=10)
+        time.sleep(3.0)
         
-        time.sleep(3.0)  # wait for page to load
-        
-        # Force Chrome to front again after load
+        # Keep Firefox focused
         subprocess.run([
             "osascript", "-e",
-            'tell application "Google Chrome" to activate'
+            'tell application "Firefox" to activate'
         ], capture_output=True)
         time.sleep(0.5)
         
-        logger.info("Successfully opened URL in Chrome: %s", url)
+        logger.info("Successfully opened URL in Firefox: %s", url)
         return {"url": url, "success": True}
-        
     except Exception as exc:
         logger.error("Error opening URL %s: %s", url, exc)
         return {"url": url, "success": False, "error": str(exc)}
