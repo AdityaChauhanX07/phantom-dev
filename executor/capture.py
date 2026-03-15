@@ -37,11 +37,23 @@ def capture_frame(
     Returns:
         Raw image bytes in the requested format.
     """
+    import pyautogui
+    
     with mss.mss() as sct:
         target = region if region else sct.monitors[monitor_index]
         raw = sct.grab(target)
 
         img = Image.frombytes("RGB", raw.size, raw.bgra, "raw", "BGRX")
+        
+        # Fix Retina/HiDPI scaling — scale screenshot down to logical coordinates
+        logical_w, logical_h = pyautogui.size()
+        if img.width > logical_w * 1.2:  # Retina detected (physical > logical)
+            img = img.resize((logical_w, logical_h), Image.LANCZOS)
+            logger.debug(
+                "Retina scaling applied: %dx%d → %dx%d",
+                raw.width, raw.height, logical_w, logical_h
+            )
+        
         buf = io.BytesIO()
         img.save(buf, format=encode.upper())
         return buf.getvalue()

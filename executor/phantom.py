@@ -102,7 +102,8 @@ class PhantomExecutor:
         logger.info("[PhantomExecutor] Running locally: %r", goal)
 
         orchestrator = TaskOrchestrator(goal)
-        state = orchestrator.run()   # blocking — TaskOrchestrator is sync
+        loop = asyncio.get_event_loop()
+        state = await loop.run_in_executor(None, orchestrator.run)
 
         _print_state_summary(state)
         self.current_task = None
@@ -156,7 +157,11 @@ class PhantomExecutor:
                         self.current_task = goal
 
                         orchestrator = TaskOrchestrator(goal)
-                        final_state = orchestrator.run()   # sync — runs in the event loop thread
+                        loop = asyncio.get_event_loop()
+                        final_state = await loop.run_in_executor(
+                            None,  # uses default ThreadPoolExecutor
+                            orchestrator.run
+                        )
                         _print_state_summary(final_state)
                         self.current_task = None
 
@@ -164,6 +169,8 @@ class PhantomExecutor:
                             task_id=task_id,
                             status=final_state.get("status", "failed"),
                             goal=final_state.get("goal", ""),
+                            steps_completed=final_state.get("steps_completed", []),
+                            steps_failed=final_state.get("steps_failed", []),
                         )
 
                     elif msg_type == "shutdown":

@@ -24,6 +24,8 @@ import re
 import time
 from copy import deepcopy
 
+import pyautogui
+
 from capture import capture_frame_b64
 from executor import execute_action
 from gemini_client import GeminiClient
@@ -129,7 +131,15 @@ FOR SEARCH TASKS (e.g., "open Google and search for Gemini"):
 """
 
 NEXT_ACTION_PROMPT = """\
-You are a desktop automation agent running on macOS. Look at the current screenshot.
+You are a desktop automation agent running on macOS.
+Screen resolution: {screen_width}x{screen_height} pixels.
+Screen center: x={screen_center_x}, y={screen_center_y}
+
+COORDINATE REFERENCE FOR THIS EXACT SCREEN:
+- Google search box: approximately x={screen_center_x}, y={screen_center_y_minus_50}
+- YouTube search box: approximately x={screen_center_x}, y=55
+- Browser address bar: approximately x={screen_center_x}, y=45
+- macOS Dock: bottom of screen at y={screen_height_minus_30}
 
 Your current task is:
   "{description}"
@@ -307,7 +317,15 @@ Be GENEROUS — if the goal is achieved, mark success=true.
 """
 
 ALTERNATIVE_ACTION_PROMPT = """\
-You are a desktop automation agent running on macOS. Look at the current screenshot.
+You are a desktop automation agent running on macOS.
+Screen resolution: {screen_width}x{screen_height} pixels.
+Screen center: x={screen_center_x}, y={screen_center_y}
+
+COORDINATE REFERENCE FOR THIS EXACT SCREEN:
+- Google search box: approximately x={screen_center_x}, y={screen_center_y_minus_50}
+- YouTube search box: approximately x={screen_center_x}, y=55
+- Browser address bar: approximately x={screen_center_x}, y=45
+- macOS Dock: bottom of screen at y={screen_height_minus_30}
 
 I tried to: {description}
 I expected: {expected_result}
@@ -564,8 +582,17 @@ class TaskOrchestrator:
         Raises:
             ValueError: If Gemini's response cannot be parsed as a JSON object.
         """
+        screen_w, screen_h = pyautogui.size()
         description = current_step.get("description", "")
-        prompt = NEXT_ACTION_PROMPT.format(description=description)
+        prompt = NEXT_ACTION_PROMPT.format(
+            description=description,
+            screen_width=screen_w,
+            screen_height=screen_h,
+            screen_center_x=screen_w // 2,
+            screen_center_y=screen_h // 2,
+            screen_center_y_minus_50=screen_h // 2 - 50,
+            screen_height_minus_30=screen_h - 30,
+        )
         logger.info("[get_next_action] Requesting action for step: %r", description)
 
         response = self._gemini_call([prompt, _inline_image(screenshot_b64)])
@@ -642,12 +669,19 @@ class TaskOrchestrator:
         Raises:
             ValueError: If Gemini's response cannot be parsed as a JSON object.
         """
+        screen_w, screen_h = pyautogui.size()
         description = step.get("description", "")
         expected_result = step.get("expected_result", "")
         prompt = ALTERNATIVE_ACTION_PROMPT.format(
             description=description,
             expected_result=expected_result,
             failure_description=failure_description,
+            screen_width=screen_w,
+            screen_height=screen_h,
+            screen_center_x=screen_w // 2,
+            screen_center_y=screen_h // 2,
+            screen_center_y_minus_50=screen_h // 2 - 50,
+            screen_height_minus_30=screen_h - 30,
         )
         logger.info(
             "[get_alternative_action] Requesting alternative for step: %r  failure: %s",
