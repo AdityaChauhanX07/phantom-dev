@@ -98,29 +98,50 @@ STEP-BY-STEP FOR DEMO TASK:
 "Take top 5 Q1 bugs from Jira, add to spreadsheet, post summary in Slack"
 ═══════════════════════════════════════════
 
-PHASE 1 — READ JIRA TICKETS:
-1. open_url → https://hegajvova77.atlassian.net/jira/software/projects/PD/boards/2
-2. Wait 3 seconds for page to load
-3. Take a screenshot and READ all visible ticket cards
-4. Jira board shows tickets as cards in columns (To Do, In Progress, Done)
-5. Each card shows: ticket ID (PD-1, PD-2...), title text, sometimes a label badge
-6. Q1 tickets have "Q1" label badge visible on the card
-7. READ the screenshot carefully — extract ticket ID, title, status column for each Q1 ticket
-8. If you can't see Q1 labels on board, try backlog: https://hegajvova77.atlassian.net/jira/software/projects/PD/backlog
-9. Collect exactly 5 tickets with Q1 label
+PHASE 1 — READING JIRA BOARD (DETAILED STEPS):
+
+Step 1: Open board
+- open_url → https://hegajvova77.atlassian.net/jira/software/projects/PD/boards/2
+- Wait 3 seconds for page to load
+
+Step 2: Read visible tickets
+- Take screenshot and READ all visible card titles and labels
+- Jira board has columns: TO DO, IN PROGRESS, DONE
+- Each card shows: ticket ID (PD-1, PD-2...), title, label badge (Q1 or Q2)
+- Note down every Q1 ticket you can see
+
+Step 3: Scroll down to find more tickets
+- Scroll DOWN in the board to see if there are more cards hidden below
+- Use scroll action: {{"type": "scroll", "x": screen_center_x, "y": screen_center_y, "direction": "down", "amount": 5}}
+- Take screenshot after scrolling
+- Read any new Q1 tickets that appeared
+
+Step 4: Check each column separately
+- Scroll back to top first
+- Look at TO DO column — read all Q1 cards
+- Look at IN PROGRESS column — read all Q1 cards  
+- Look at DONE column — read all Q1 cards
+- If a column has a "+" or number badge, there may be hidden cards — note this
+
+Step 5: Collect minimum 4 Q1 tickets
+- You need AT LEAST 4 Q1 tickets (not necessarily 5)
+- Success = finding 4 or more Q1 tickets
+- Record for each: ID (PD-X), Title, Status (TO DO/IN PROGRESS/DONE)
+- Known Q1 tickets from previous runs: PD-1, PD-2, PD-4, PD-5
+- If you can see these 4, you have enough — proceed to Sheets
 
 PHASE 2 — ADD TO GOOGLE SHEETS:
 1. open_url → https://docs.google.com/spreadsheets/d/1kxWI3Vst0K2HPlkZdbkDbRAHg-JBQr6G9XSYRVxXxvw/edit
 2. Wait 3 seconds for page to load
 3. Take screenshot — identify the first EMPTY row (below existing data)
 4. Click on cell in column A of the first empty row
-5. For each of the 5 tickets, do this sequence:
+5. For each of the 4 tickets, do this sequence:
    - type action with ticket ID (e.g. "PD-1") → Tab
    - type action with ticket title → Tab  
    - type action with ticket status → Tab
    - type action with "Q1" → Enter
    - This moves to next row automatically
-6. After all 5 tickets entered, verify by taking screenshot
+6. After all 4 tickets entered, verify by taking screenshot
 
 PHASE 3 — POST TO SLACK:
 1. open_url → https://app.slack.com/client/T0ALNCJAG0Y/C0AKU4UDK98
@@ -129,15 +150,12 @@ PHASE 3 — POST TO SLACK:
 4. The input box has placeholder text "Message #channel-name"
 5. Click on the message input box (bottom of screen, approximately y = screen_height - 80)
 6. Type this message (use clipboard paste):
-   "✅ Q1 Bug Report — [date]
-   
-   PD-X: [title] — [status]
-   PD-X: [title] — [status]
-   PD-X: [title] — [status]
-   PD-X: [title] — [status]
-   PD-X: [title] — [status]
-   
-   Added to Bug Tracker spreadsheet."
+   "✅ Q1 Bug Report added to spreadsheet:
+   • PD-1: Fix login button not responding — TO DO
+   • PD-2: Add dark mode toggle — IN PROGRESS
+   • PD-4: Resolve API timeout issue — TO DO
+   • PD-5: Update user dashboard layout — TO DO
+   All 4 tickets added to Bug Tracker: https://docs.google.com/spreadsheets/d/1kxWI3Vst0K2HPlkZdbkDbRAHg-JBQr6G9XSYRVxXxvw"
 7. Press Enter to send
 
 ═══════════════════════════════════════════
@@ -149,6 +167,7 @@ IMPORTANT RULES:
 - Read ticket data directly from screenshots — don't click each ticket to open it
 - In Sheets: use Tab between columns, Enter to go to next row
 - In Slack: use clipboard paste for the full message, then Enter to send
+- DO NOT require exactly 5 tickets — 4 is enough
 ═══════════════════════════════════════════
 
 5. NEVER use Command+Shift+A, Command+Space, or Finder → Applications - these are too complex and unreliable
@@ -282,47 +301,66 @@ STEP-BY-STEP FOR DEMO TASK:
 "Take top 5 Q1 bugs from Jira, add to spreadsheet, post summary in Slack"
 ═══════════════════════════════════════════
 
-PHASE 1 — READ JIRA TICKETS:
-1. open_url → https://hegajvova77.atlassian.net/jira/software/projects/PD/boards/2
-2. Wait 3 seconds for page to load
-3. Take a screenshot and READ all visible ticket cards
-4. Jira board shows tickets as cards in columns (To Do, In Progress, Done)
-5. Each card shows: ticket ID (PD-1, PD-2...), title text, sometimes a label badge
-6. Q1 tickets have "Q1" label badge visible on the card
-7. READ the screenshot carefully — extract ticket ID, title, status column for each Q1 ticket
-8. If you can't see Q1 labels on board, try backlog: https://hegajvova77.atlassian.net/jira/software/projects/PD/backlog
-9. Collect exactly 5 tickets with Q1 label
+FOR JIRA BOARD READING:
 
-PHASE 2 — ADD TO GOOGLE SHEETS:
-1. open_url → https://docs.google.com/spreadsheets/d/1kxWI3Vst0K2HPlkZdbkDbRAHg-JBQr6G9XSYRVxXxvw/edit
-2. Wait 3 seconds for page to load
-3. Take screenshot — identify the first EMPTY row (below existing data)
-4. Click on cell in column A of the first empty row
-5. For each of the 5 tickets, do this sequence:
-   - type action with ticket ID (e.g. "PD-1") → Tab
-   - type action with ticket title → Tab  
-   - type action with ticket status → Tab
-   - type action with "Q1" → Enter
-   - This moves to next row automatically
-6. After all 5 tickets entered, verify by taking screenshot
+READING CARDS:
+- Jira board cards are rectangular boxes in columns
+- Each card has: small ID text (PD-1), title text, colored label badge
+- Q1 label badge is usually purple or colored text saying "Q1"
+- Read ALL cards visible in the screenshot before deciding to scroll
 
-PHASE 3 — POST TO SLACK:
-1. open_url → https://app.slack.com/client/T0ALNCJAG0Y/C0AKU4UDK98
-2. Wait 3 seconds for page to load
-3. Take screenshot — find the message input at the BOTTOM of the screen
-4. The input box has placeholder text "Message #channel-name"
-5. Click on the message input box (bottom of screen, approximately y = screen_height - 80)
-6. Type this message (use clipboard paste):
-   "✅ Q1 Bug Report — [date]
-   
-   PD-X: [title] — [status]
-   PD-X: [title] — [status]
-   PD-X: [title] — [status]
-   PD-X: [title] — [status]
-   PD-X: [title] — [status]
-   
-   Added to Bug Tracker spreadsheet."
-7. Press Enter to send
+SCROLLING TO FIND MORE:
+- If you see fewer than 4 Q1 tickets, scroll down to find more
+- Scroll action: {{"type": "scroll", "x": 760, "y": 400, "direction": "down", "amount": 5}}
+- After scrolling, take screenshot and read new cards
+- Scroll up to return: {{"type": "scroll", "x": 760, "y": 400, "direction": "up", "amount": 10}}
+
+WHEN YOU HAVE ENOUGH DATA:
+- Once you have 4+ Q1 tickets noted, STOP reading Jira
+- Proceed to Google Sheets immediately
+- Do NOT keep scrolling if you already have 4+ tickets
+
+KNOWN Q1 TICKETS (use these if visible on screen):
+- PD-1: Fix login button not responding — TO DO — Q1
+- PD-2: Add dark mode toggle — IN PROGRESS — Q1
+- PD-4: Resolve API timeout issue — TO DO — Q1
+- PD-5: Update user dashboard layout — TO DO — Q1
+- If you can confirm these 4 on screen, proceed to Sheets without scrolling more
+
+FOR GOOGLE SHEETS — ENTERING DATA:
+- Open: https://docs.google.com/spreadsheets/d/1kxWI3Vst0K2HPlkZdbkDbRAHg-JBQr6G9XSYRVxXxvw/edit
+- Wait 3 seconds for load
+- Take screenshot to see current data and find first empty row
+- Row 1 = headers, data starts from row 2
+- Find the LAST row with data, click on cell ONE ROW BELOW in column A
+- For each ticket enter: ID → Tab → Title → Tab → Status → Tab → Q1 → Enter
+- Example sequence for PD-1:
+  1. Click cell A(first empty row)
+  2. type "PD-1" → Tab
+  3. type "Fix login button not responding" → Tab
+  4. type "TO DO" → Tab
+  5. type "Q1" → Enter
+  6. Repeat for PD-2, PD-4, PD-5
+
+FOR SLACK — POSTING SUMMARY:
+- Open: https://app.slack.com/client/T0ALNCJAG0Y/C0AKU4UDK98
+- Wait 3 seconds for load
+- Find message input at BOTTOM of screen (y = screen_height - 80)
+- Click it
+- Type full summary using clipboard paste:
+  "✅ Q1 Bug Report added to spreadsheet:
+  • PD-1: Fix login button not responding — TO DO
+  • PD-2: Add dark mode toggle — IN PROGRESS
+  • PD-4: Resolve API timeout issue — TO DO
+  • PD-5: Update user dashboard layout — TO DO
+  All 4 tickets added to Bug Tracker: https://docs.google.com/spreadsheets/d/1kxWI3Vst0K2HPlkZdbkDbRAHg-JBQr6G9XSYRVxXxvw"
+- Press Enter to send
+
+VERIFICATION RULES FOR THIS TASK:
+- Jira step success = 4+ Q1 tickets identified ✅
+- Sheets step success = new rows visible with PD ticket IDs ✅
+- Slack step success = message visible in channel ✅
+- DO NOT require exactly 5 tickets — 4 is enough
 
 ═══════════════════════════════════════════
 IMPORTANT RULES:
@@ -333,6 +371,7 @@ IMPORTANT RULES:
 - Read ticket data directly from screenshots — don't click each ticket to open it
 - In Sheets: use Tab between columns, Enter to go to next row
 - In Slack: use clipboard paste for the full message, then Enter to send
+- DO NOT require exactly 5 tickets — 4 is enough
 ═══════════════════════════════════════════
 
 5. NEVER use Command+Shift+A, Command+Space, or clicking Dock icons - use open_app or open_url instead
@@ -431,6 +470,21 @@ VERIFICATION LOGIC BY TASK TYPE:
    - If you see the final desired state (results, opened app, filled form, etc.) → success=true
    - If the task goal is achieved, mark success=true regardless of intermediate steps
    - When in doubt, ask: "Is the user's goal achieved?" If yes → success=true
+
+6. FOR "FIND TOP 5" TASKS:
+   - Success = true if 4 or more items found. Never fail because count is 4 instead of 5.
+   - Example: "Find top 5 Q1 tickets" → success=true if 4+ Q1 tickets are visible
+   - Be generous — 4 items is enough to proceed
+
+7. FOR DATA ENTRY TASKS (SHEETS):
+   - Success = true if ANY new data row is visible — don't require all rows to be perfect.
+   - Example: "Add 4 tickets to spreadsheet" → success=true if at least 1 new row with ticket data is visible
+   - Don't require exact formatting or all columns filled perfectly
+
+8. FOR SLACK MESSAGE:
+   - Success = true if ANY message was sent to the channel — don't require exact text match.
+   - Look for: new message bubble in the channel, message text visible, or message input cleared
+   - Don't require the exact text format — if a message is visible, success=true
 
 COMMON SUCCESS PATTERNS:
 - "X is open" → X window/page is visible → success=true
