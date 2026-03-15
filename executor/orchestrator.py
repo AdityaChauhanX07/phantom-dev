@@ -24,6 +24,8 @@ import re
 import time
 from copy import deepcopy
 
+import pyautogui
+
 from capture import capture_frame_b64
 from executor import execute_action
 from gemini_client import GeminiClient
@@ -65,11 +67,46 @@ Return ONLY a JSON array — no markdown fences, no extra text:
 Rules:
 - Each step must be a single, observable action (one click, one keystroke, etc.).
 - Keep descriptions concise and unambiguous.
-- expected_result should be visually verifiable from a screenshot.
+- expected_result MUST be visually verifiable from a screenshot.
+- expected_result should describe the FINAL STATE, not the action itself.
+- Remember: This is macOS, not Windows. Use macOS-specific shortcuts (Cmd+Tab for app switching).
+- To open applications: ALWAYS try Dock first. If Dock icon is visible, use ONE step: "Click on [AppName] icon in Dock"
+- DO NOT use keyboard shortcuts like Command+Shift+A or Command+Space unless absolutely necessary
+- Keep steps SIMPLE - if you can do it in 1 click, don't make it 3 steps
+
+EXPECTED RESULT GUIDELINES (CRITICAL):
+- expected_result must describe what the SCREEN should show, not what action was taken
+- Good: "Google homepage is open and visible" (describes screen state)
+- Bad: "Opened Google" (describes action, not state)
+- Good: "Search results for 'Gemini' are displayed" (describes screen state)
+- Bad: "Searched for Gemini" (describes action, not state)
+- The verifier will check if the expected_result is visible on screen
+- Make expected_result specific and checkable: "X is visible", "Y appears", "Z is displayed"
+
+FOR SEARCH TASKS (e.g., "open Google and search for Gemini"):
+- Step 1: Open the website
+  - Description: "Open Google"
+  - Expected result: "Google homepage or search page is open and visible on screen"
+- Step 2: Type the search query
+  - Description: "Type 'Gemini' into the search bar"
+  - Expected result: "The search query 'Gemini' appears in the search bar, OR search results for 'Gemini' are displayed"
+- Step 3: Execute the search (if Step 2 didn't auto-execute)
+  - Description: "Press Enter to execute the search"
+  - Expected result: "Search results page for 'Gemini' is displayed with links, snippets, or video thumbnails"
+- The FINAL step's expected_result should clearly indicate task completion
+- If search results are visible → task is complete → mark that step as the last one
 """
 
 NEXT_ACTION_PROMPT = """\
-You are a desktop automation agent. Look at the current screenshot.
+You are a desktop automation agent running on macOS.
+Screen resolution: {screen_width}x{screen_height} pixels.
+Screen center: x={screen_center_x}, y={screen_center_y}
+
+COORDINATE REFERENCE FOR THIS EXACT SCREEN:
+- Google search box: approximately x={screen_center_x}, y={screen_center_y_minus_50}
+- YouTube search box: approximately x={screen_center_x}, y=55
+- Browser address bar: approximately x={screen_center_x}, y=45
+- macOS Dock: bottom of screen at y={screen_height_minus_30}
 
 Your current task is:
   "{description}"
@@ -80,10 +117,14 @@ be a click on the target field, not a type action, if the field has not been \
 explicitly clicked in this step.
 
 Return ONLY a single JSON action object — no markdown fences, no extra text:
-{{"type": "click|type|key_combo|scroll|double_click|move|wait", "x": <int>, "y": <int>, "text": "<string>", "keys": ["<key>", ...], "direction": "up|down", "amount": <int>, "seconds": <float>, "confidence": <0.0-1.0>, "reason": "<why>"}}
+{{"type": "click|type|key_combo|scroll|double_click|move|wait|open_app|open_url", "x": <int>, "y": <int>, "text": "<string>", "keys": ["<key>", ...], "direction": "up|down", "amount": <int>, "seconds": <float>, "app_name": "<string>", "url": "<string>", "confidence": <0.0-1.0>, "reason": "<why>"}}
+
+For opening:
+- Applications: {{"type": "open_app", "app_name": "Calculator"}}
+- Websites: {{"type": "open_url", "url": "youtube.com"}}
 
 Include only the fields relevant to the chosen action type.
-Set "confidence" to reflect how certain you are about the coordinates/target.
+Set "confidence" to reflect how certain you are about the coordinates/target. If coordinates are uncertain, use confidence < 0.8.
 """
 
 VERIFY_PROMPT = """\
@@ -103,7 +144,15 @@ Return ONLY a JSON object — no markdown fences, no extra text:
 """
 
 ALTERNATIVE_ACTION_PROMPT = """\
-You are a desktop automation agent. Look at the current screenshot.
+You are a desktop automation agent running on macOS.
+Screen resolution: {screen_width}x{screen_height} pixels.
+Screen center: x={screen_center_x}, y={screen_center_y}
+
+COORDINATE REFERENCE FOR THIS EXACT SCREEN:
+- Google search box: approximately x={screen_center_x}, y={screen_center_y_minus_50}
+- YouTube search box: approximately x={screen_center_x}, y=55
+- Browser address bar: approximately x={screen_center_x}, y=45
+- macOS Dock: bottom of screen at y={screen_height_minus_30}
 
 I tried to: {description}
 I expected: {expected_result}
@@ -111,8 +160,86 @@ It failed because: {failure_description}
 
 Look at the current screen and suggest a completely different approach to achieve the same goal.
 
+IMPORTANT FOR TYPING:
+- For tasks that say "Type X into Y", return a "type" action with both coordinates (x, y) of the input field AND the "text" field.
+- Example: {{"type": "type", "x": 430, "y": 55, "text": "Google Gemini", "confidence": 0.9, "reason": "Typing into address bar"}}
+- The executor will automatically click on the field, select all text, then type the new text.
+
+IMPORTANT FOR OPENING:
+- If the goal is to open a WEBSITE (YouTube, Google, Jira, Facebook, Google Gemini, etc.), use {{"type": "open_url", "url": "youtube.com"}}
+- If the goal is to open an APPLICATION (Calculator, TextEdit, Safari, Chrome), use {{"type": "open_app", "app_name": "Calculator"}}
+- Websites are services you access through a browser - use open_url
+- Applications are macOS programs - use open_app
+- CRITICAL: For websites, NEVER try to click bookmarks, links, or browser UI - ALWAYS use open_url directly
+- For Google services: "Google Gemini" → "gemini.google.com", "Google" → "google.com"
+
+BROWSER: Firefox. All sites already logged in. open_url opens new tab in existing Firefox window.
+
+EXACT DEMO URLS:
+- Jira board: https://hegajvova77.atlassian.net/jira/software/projects/PD/boards/2
+- Google Sheets: https://docs.google.com/spreadsheets/d/1kxWI3Vst0K2HPlkZdbkDbRAHg-JBQr6G9XSYRVxXxvw/edit
+- Slack: https://app.slack.com/client/T0ALNCJAG0Y/C0AKU4UDK98
+
+IMPORTANT RULES:
+- NEVER try to log in — already authenticated
+- NEVER click "Sign in" or "Log in" buttons
+- Take a screenshot after opening each URL to verify correct page loaded
+- Read ticket data directly from screenshots — don't click each ticket to open it
+- In Sheets: use Tab between columns, Enter to go to next row
+- In Slack: use clipboard paste for the full message, then Enter to send
+
+COORDINATE PRECISION:
+- When clicking on UI elements, ALWAYS click on the CENTER of the visible element, not the edges.
+- Look carefully at the screenshot to identify the exact center of the target element.
+- If you're not 100% certain about coordinates, set confidence < 0.8.
+- For buttons/icons: click the center of the visible button/icon area.
+- For text fields: click the center of the input field.
+- For menu items: click the center of the text/icon of the menu item.
+
+FINDING SEARCH BARS AND INPUT FIELDS (CRITICAL - BE PRECISE):
+- Search bars are usually large rectangular boxes, often in the center or top of the page
+- On Google homepage: The search box is a LARGE rounded rectangle in the CENTER of the page, below the Google logo
+  - It's typically 400-600 pixels wide, 40-50 pixels tall
+  - Usually positioned at approximately: x = screen_width/2, y = screen_height/2 or slightly above
+  - Look for a white or light gray rounded rectangle with a shadow
+  - May have placeholder text "Search Google" or a search icon inside
+  - Click on the CENTER of this rectangle (not on the icon, not on the edges)
+  - Typical coordinates for 1920x1080 screen: x = 960, y = 400-500
+  - Typical coordinates for 1440x900 screen: x = 720, y = 350-450
+- On YouTube: The search box is at the TOP of the page, in the header area
+  - Usually positioned at: x = screen_width/2, y = 50-100 pixels from top
+  - Look for a rectangular input field with "Search" placeholder
+- General rules:
+  - Search bars are usually the LARGEST input field visible on the page
+  - They're often in the center (for homepages) or top (for navigation)
+  - Look for rounded corners, shadows, or distinctive styling
+  - If you see placeholder text like "Search", "Search Google", "Search YouTube" → that's the search box
+  - Click on the CENTER of the visible search box rectangle
+  - Use confidence 0.8-0.9 if you can clearly see the search box boundaries
+  - Use confidence 0.6-0.7 if you're estimating based on typical layout
+  - If confidence is below 0.6, try to identify the search box more carefully before clicking
+- ALTERNATIVE METHOD if search box is hard to find:
+  - On Google: You can press Tab key multiple times to navigate to the search box, then type
+  - But clicking is preferred if you can see the search box clearly
+
+OPENING APPLICATIONS vs WEBSITES:
+- For APPLICATIONS (Calculator, TextEdit, Safari, Chrome): Use {{"type": "open_app", "app_name": "Calculator"}}
+- For WEBSITES (YouTube, Google, Jira, Facebook): Use {{"type": "open_url", "url": "youtube.com"}}
+- Websites are services like YouTube, Google, Jira - use open_url, not open_app
+- Applications are macOS apps like Calculator, TextEdit - use open_app
+- NEVER use Command+Shift+A, Command+Space, or clicking Dock icons - use open_app or open_url instead
+
+DEMO URLS — use these exact URLs when opening demo apps:
+- Jira: https://hegajvova77.atlassian.net/jira/software/projects/PD/backlog
+- Sheets: https://docs.google.com/spreadsheets/d/1kxWI3Vst0K2HPlkZdbkDbRAHg-JBQr6G9XSYRVxXxvw/edit
+- Slack: https://app.slack.com/client/T0ALNCJAG0Y/C0AKU4UDK98
+
 Return ONLY a single JSON action object — no markdown fences, no extra text:
-{{"type": "click|type|key_combo|scroll|double_click|move|wait", "x": <int>, "y": <int>, "text": "<string>", "keys": ["<key>", ...], "direction": "up|down", "amount": <int>, "seconds": <float>, "confidence": <0.0-1.0>, "reason": "<why>"}}
+{{"type": "click|type|key_combo|scroll|double_click|move|wait|open_app|open_url", "x": <int>, "y": <int>, "text": "<string>", "keys": ["<key>", ...], "direction": "up|down", "amount": <int>, "seconds": <float>, "app_name": "<string>", "url": "<string>", "confidence": <0.0-1.0>, "reason": "<why>"}}
+
+For opening:
+- Applications: {{"type": "open_app", "app_name": "Calculator"}}
+- Websites: {{"type": "open_url", "url": "youtube.com"}}
 
 Include only the fields relevant to the chosen action type.
 """
@@ -302,8 +429,17 @@ class TaskOrchestrator:
         Raises:
             ValueError: If Gemini's response cannot be parsed as a JSON object.
         """
+        screen_w, screen_h = pyautogui.size()
         description = current_step.get("description", "")
-        prompt = NEXT_ACTION_PROMPT.format(description=description)
+        prompt = NEXT_ACTION_PROMPT.format(
+            description=description,
+            screen_width=screen_w,
+            screen_height=screen_h,
+            screen_center_x=screen_w // 2,
+            screen_center_y=screen_h // 2,
+            screen_center_y_minus_50=screen_h // 2 - 50,
+            screen_height_minus_30=screen_h - 30,
+        )
         logger.info("[get_next_action] Requesting action for step: %r", description)
 
         response = self._gemini_call([prompt, _inline_image(screenshot_b64)])
@@ -380,12 +516,19 @@ class TaskOrchestrator:
         Raises:
             ValueError: If Gemini's response cannot be parsed as a JSON object.
         """
+        screen_w, screen_h = pyautogui.size()
         description = step.get("description", "")
         expected_result = step.get("expected_result", "")
         prompt = ALTERNATIVE_ACTION_PROMPT.format(
             description=description,
             expected_result=expected_result,
             failure_description=failure_description,
+            screen_width=screen_w,
+            screen_height=screen_h,
+            screen_center_x=screen_w // 2,
+            screen_center_y=screen_h // 2,
+            screen_center_y_minus_50=screen_h // 2 - 50,
+            screen_height_minus_30=screen_h - 30,
         )
         logger.info(
             "[get_alternative_action] Requesting alternative for step: %r  failure: %s",
@@ -519,13 +662,13 @@ class TaskOrchestrator:
                             last_failure,
                         )
 
-            # ── TIER 1: wait 2s, retry same action ──────────────────────
+            # ── TIER 1: wait 1s, retry same action ──────────────────────
             if not success and action is not None:
                 logger.info(
-                    "[run]   [TIER 1] Step %d — waiting 2s then retrying same action...",
+                    "[run]   [TIER 1] Step %d — waiting 1s then retrying same action...",
                     step_num,
                 )
-                time.sleep(2)
+                time.sleep(1)  # Reduced from 2s to 1s for faster execution
 
                 logger.info("[run]   [TIER 1] Capturing before-screenshot...")
                 t1_before_b64 = capture_frame_b64()
@@ -763,16 +906,52 @@ class TaskOrchestrator:
         # ── Step 3: determine final status ───────────────────────────────
         if self.state["status"] == "running":
             failed_count = len(self.state["steps_failed"])
-            if failed_count == 0:
-                self.state["status"] = "completed"
-            elif failed_count < len(steps):
-                self.state["status"] = "completed"   # partial success
-                logger.warning(
-                    "[run] Task finished with %d failed step(s) out of %d.",
-                    failed_count, len(steps),
-                )
-            else:
-                self.state["status"] = "failed"
+            completed_count = len(self.state["steps_completed"])
+            
+            # Final verification: check if the goal was actually achieved
+            # Capture a final screenshot and ask Gemini if the goal is complete
+            logger.info("[run] Performing final goal verification...")
+            final_b64 = capture_frame_b64()
+            try:
+                final_check_prompt = f"""Look at this screenshot. The user's goal was: "{self.goal}"
+
+Is this goal currently achieved? Look for:
+- If goal was to open something: is it open and visible?
+- If goal was to search: are search results visible?
+- If goal was to type something: is the text visible?
+- If goal was to click something: did the expected result happen?
+
+Return ONLY a JSON object: {{"goal_achieved": <true|false>, "reason": "<brief explanation>"}}"""
+                
+                final_response = self._gemini_call([final_check_prompt, _inline_image(final_b64)])
+                final_check = _extract_json(final_response.text, label="final_check")
+                
+                if final_check.get("goal_achieved", False):
+                    logger.info("[run] Final verification: Goal achieved! %s", final_check.get("reason", ""))
+                    self.state["status"] = "completed"
+                elif failed_count == 0:
+                    self.state["status"] = "completed"
+                elif failed_count < len(steps) and completed_count > 0:
+                    self.state["status"] = "completed"   # partial success
+                    logger.warning(
+                        "[run] Task finished with %d failed step(s) out of %d.",
+                        failed_count, len(steps),
+                    )
+                else:
+                    self.state["status"] = "failed"
+            except Exception as exc:
+                logger.warning("[run] Final verification failed, using step-based logic: %s", exc)
+                # Fallback to step-based logic
+                if failed_count == 0:
+                    self.state["status"] = "completed"
+                elif failed_count < len(steps) and completed_count > 0:
+                    self.state["status"] = "completed"   # partial success
+                    logger.warning(
+                        "[run] Task finished with %d failed step(s) out of %d.",
+                        failed_count, len(steps),
+                    )
+                else:
+                    self.state["status"] = "failed"
 
         self.state["current_step"] = None
         logger.info(

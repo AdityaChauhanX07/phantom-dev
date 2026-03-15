@@ -41,8 +41,8 @@ pyautogui.PAUSE = 0.05
 # Constants
 # ---------------------------------------------------------------------------
 
-CONFIDENCE_THRESHOLD = 0.3  # Lowered to 0.3 for testing - allows actions even when element visibility is uncertain
-SETTLE_DELAY = 0.2          # Reduced from 0.5 to 0.2 seconds for faster execution
+CONFIDENCE_THRESHOLD = 0.25  # Lowered to 0.25 for better reliability
+SETTLE_DELAY = 0.3           # Increased to 0.3 — give UI more time to respond
 NO_SETTLE = {"wait", "screenshot"}
 
 
@@ -95,6 +95,7 @@ def _handle_double_click(action: dict) -> dict:
 
 def _handle_type(action: dict) -> dict:
     text = action["text"]
+
     # If coordinates are provided, click on the field first to focus it
     if "x" in action and "y" in action:
         x, y = action["x"], action["y"]
@@ -204,8 +205,8 @@ def _handle_open_app(action: dict) -> dict:
 
 def _handle_open_url(action: dict) -> dict:
     """
-    Open a URL in the default browser using macOS 'open' command.
-    This works for any website: youtube.com, google.com, jira.com, etc.
+    Open a URL in Firefox as a new tab in existing window.
+    This keeps user sessions active (logged in to Jira, Sheets, Slack).
     
     Args:
         action: {"type": "open_url", "url": "https://youtube.com"}
@@ -221,28 +222,14 @@ def _handle_open_url(action: dict) -> dict:
     # Add https:// if not present
     if not url.startswith(("http://", "https://")):
         url = "https://" + url
-    
-    logger.info("Opening URL: %s", url)
+
+    logger.info("Opening URL in Firefox: %s", url)
     try:
-        # Use 'open' command to open URL in default browser
-        result = subprocess.run(
-            ["open", url],
-            capture_output=True,
-            text=True,
-            timeout=5
-        )
-        if result.returncode == 0:
-            logger.info("Successfully opened URL: %s", url)
-            # Wait a bit for the browser to load
-            time.sleep(2.0)
-            return {"url": url, "success": True}
-        else:
-            error_msg = result.stderr.strip() or "Unknown error"
-            logger.warning("Failed to open URL %s: %s", url, error_msg)
-            return {"url": url, "success": False, "error": error_msg}
-    except subprocess.TimeoutExpired:
-        logger.warning("Timeout opening URL %s", url)
-        return {"url": url, "success": False, "error": "Timeout"}
+        # Open URL in existing Firefox window as new tab — keeps user logged in
+        import webbrowser
+        webbrowser.open(url)
+        time.sleep(3.0)
+        return {"url": url, "success": True}
     except Exception as exc:
         logger.error("Error opening URL %s: %s", url, exc)
         return {"url": url, "success": False, "error": str(exc)}

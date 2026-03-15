@@ -67,7 +67,7 @@ logger = logging.getLogger("phantom.voice")
 GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
 AGENT_URL: str = os.getenv("AGENT_URL", "http://localhost:8000").rstrip("/")
 GCP_PROJECT_ID: str = os.getenv("GCP_PROJECT_ID", "phantom-dev-489603")
-GCP_LOCATION: str = os.getenv("GCP_LOCATION", "us-east4")
+GCP_LOCATION: str = os.getenv("GCP_LOCATION", "us-central1")
 # Text model for offline STT → TASK flow (non-Live). Must be a regular Gemini model name.
 TEXT_MODEL: str = os.getenv("TEXT_MODEL", "gemini-2.5-flash")
 # Live API model - MUST use native-audio model for Live API
@@ -121,7 +121,13 @@ class VoiceGateway:
     def __init__(self):
         self._api_key: str = GEMINI_API_KEY
         self._agent_url: str = AGENT_URL
+        # Live API requires API key (does not support Vertex AI)
+        # Only /stt-task endpoint uses Vertex AI to avoid rate limits
+        if not self._api_key:
+            logger.warning("GEMINI_API_KEY not set — Live API will not work")
         self._genai_client = genai.Client(api_key=self._api_key) if self._api_key else None
+        if self._genai_client:
+            logger.info("GeminiLiveGateway using API key for Live API (Vertex AI used only for /stt-task)")
         self.session = None          # active Gemini Live session context manager
         self._session_ctx = None     # the context manager handle
         self.active: bool = False
@@ -139,7 +145,7 @@ class VoiceGateway:
             session_id: Caller-supplied identifier for logging/correlation.
         """
         if not self._genai_client:
-            raise EnvironmentError("GEMINI_API_KEY is not set — cannot start Gemini session.")
+            raise EnvironmentError("GEMINI_API_KEY is not set — cannot start Gemini Live session.")
 
         self._session_id = session_id
         # Request both TEXT and AUDIO so we get a transcript ("TASK: ...") and spoken response.
@@ -452,14 +458,21 @@ async def stt_task(request: Request):
 
         content_type = request.headers.get("content-type", "audio/webm")
 
-        if not GEMINI_API_KEY:
-            logger.error("[/stt-task] GEMINI_API_KEY is not set")
+        # Use Vertex AI instead of AI Studio to avoid rate limits
+        if not GCP_PROJECT_ID:
+            logger.error("[/stt-task] GCP_PROJECT_ID is not set")
             return JSONResponse(
-                {"message": "GEMINI_API_KEY is not configured on the server"},
+                {"message": "GCP_PROJECT_ID is not configured on the server"},
                 status_code=500,
             )
 
-        genai_client = genai.Client(api_key=GEMINI_API_KEY)
+        # Use Vertex AI (no API key needed, uses GCP service account)
+        genai_client = genai.Client(
+            vertexai=True,
+            project=GCP_PROJECT_ID,
+            location=GCP_LOCATION,
+        )
+        logger.info("[/stt-task] Using Vertex AI — project=%s location=%s", GCP_PROJECT_ID, GCP_LOCATION)
 
         prompt = (
             "You are Phantom's voice interface.\n"
