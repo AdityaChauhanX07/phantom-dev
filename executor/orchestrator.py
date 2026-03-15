@@ -41,9 +41,9 @@ DRY_RUN = False
 
 DECOMPOSE_PROMPT = """\
 IMPORTANT CONTEXT — App URLs to use:
-- Jira: https://adityachauhanx07.atlassian.net/jira/software/projects/SCRUM/boards/1
-- Google Sheets: navigate to sheets.google.com and open 'Bug Tracker'
-- Slack: navigate to app.slack.com
+- Jira: https://hegajvova77.atlassian.net/jira/software/projects/PD/boards/2
+- Google Sheets: https://docs.google.com/spreadsheets/d/1kxWI3Vst0K2HPlkZdbkDbRAHg-JBQr6G9XSYRVxXxvw/edit
+- Slack: https://app.slack.com/client/T0ALNCJAG0Y/C0AKQMHB7SR
 
 Always navigate directly to these URLs. Do not search for the apps.
 
@@ -178,7 +178,7 @@ BROWSER: Firefox. All sites already logged in. open_url opens new tab in existin
 EXACT DEMO URLS:
 - Jira board: https://hegajvova77.atlassian.net/jira/software/projects/PD/boards/2
 - Google Sheets: https://docs.google.com/spreadsheets/d/1kxWI3Vst0K2HPlkZdbkDbRAHg-JBQr6G9XSYRVxXxvw/edit
-- Slack: https://app.slack.com/client/T0ALNCJAG0Y/C0AKU4UDK98
+- Slack: https://app.slack.com/client/T0ALNCJAG0Y/C0AKQMHB7SR
 
 IMPORTANT RULES:
 - NEVER try to log in — already authenticated
@@ -230,9 +230,9 @@ OPENING APPLICATIONS vs WEBSITES:
 - NEVER use Command+Shift+A, Command+Space, or clicking Dock icons - use open_app or open_url instead
 
 DEMO URLS — use these exact URLs when opening demo apps:
-- Jira: https://hegajvova77.atlassian.net/jira/software/projects/PD/backlog
+- Jira: https://hegajvova77.atlassian.net/jira/software/projects/PD/boards/2
 - Sheets: https://docs.google.com/spreadsheets/d/1kxWI3Vst0K2HPlkZdbkDbRAHg-JBQr6G9XSYRVxXxvw/edit
-- Slack: https://app.slack.com/client/T0ALNCJAG0Y/C0AKU4UDK98
+- Slack: https://app.slack.com/client/T0ALNCJAG0Y/C0AKQMHB7SR
 
 Return ONLY a single JSON action object — no markdown fences, no extra text:
 {{"type": "click|type|key_combo|scroll|double_click|move|wait|open_app|open_url", "x": <int>, "y": <int>, "text": "<string>", "keys": ["<key>", ...], "direction": "up|down", "amount": <int>, "seconds": <float>, "app_name": "<string>", "url": "<string>", "confidence": <0.0-1.0>, "reason": "<why>"}}
