@@ -89,6 +89,7 @@
   let mediaRecorder = null;           // PCM stream + STT recorder bundle
   let sessionStarted = false;
   let sessionReady = false;  // True when session_started event received
+  let waitingForSession = false;  // True when waiting for session_started event
   let audioContext = null;
   let pendingStream = null;  // Store stream if mic access happens before session ready
 
@@ -140,8 +141,12 @@
   function handleEvent(msg) {
     switch (msg.event) {
       case 'session_started':
-        log('Session started: ' + msg.session_id, 'ev-status');
+        sessionStarted = true;
+        waitingForSession = false;
         sessionReady = true;
+        labelEl.textContent = 'Session ready! Press to talk';
+        micBtn.disabled = false;
+        log('Session started: ' + msg.session_id, 'ev-status');
         // If we already have a pending stream, start recording now
         if (pendingStream) {
           startRecording(pendingStream);
@@ -328,10 +333,13 @@
     }
 
     // Start session if not started
-    if (!sessionStarted) {
+    if (!sessionStarted && !waitingForSession) {
+      waitingForSession = true;
+      labelEl.textContent = 'Starting session...';
+      micBtn.disabled = true;
       ws.send(JSON.stringify({ type: 'start', session_id: crypto.randomUUID() }));
-      sessionStarted = true;
-      labelEl.textContent = 'Starting session…';
+      // Recording will start automatically when session_started event arrives
+      return;
     }
 
     // Request microphone access
@@ -340,6 +348,8 @@
       stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     } catch (e) {
       log('Mic access denied: ' + e.message, 'ev-error');
+      waitingForSession = false;
+      micBtn.disabled = false;
       return;
     }
 
