@@ -65,9 +65,9 @@ class PhantomWSClient:
 
     async def connect(self) -> None:
         """
-        Open the WebSocket connection with automatic retry.
+        Open the WebSocket connection with automatic retry and exponential backoff.
 
-        Retries up to ``_MAX_RETRIES`` times with ``_RETRY_DELAY`` seconds
+        Retries up to ``_MAX_RETRIES`` times with exponential backoff
         between attempts.  Raises ``ConnectionError`` if all attempts fail.
         """
         last_exc: Exception | None = None
@@ -85,7 +85,9 @@ class PhantomWSClient:
                 
                 self.websocket = await websockets.connect(
                     self.url,
-                    ssl=ssl_context
+                    ssl=ssl_context,
+                    ping_interval=30,  # Send ping every 30 seconds
+                    ping_timeout=10,   # Wait 10 seconds for pong
                 )
                 self.connected = True
                 logger.info("[PhantomWSClient] Connected to agent at %s", self.url)
@@ -99,12 +101,14 @@ class PhantomWSClient:
             except Exception as exc:
                 last_exc = exc
                 if attempt < _MAX_RETRIES:
+                    # Exponential backoff: 2^attempt seconds
+                    wait_time = 2 ** attempt
                     logger.warning(
                         "[PhantomWSClient] Connection attempt %d/%d failed (%s). "
                         "Retrying in %.0f s...",
-                        attempt, _MAX_RETRIES, exc, _RETRY_DELAY,
+                        attempt, _MAX_RETRIES, exc, wait_time,
                     )
-                    await asyncio.sleep(_RETRY_DELAY)
+                    await asyncio.sleep(wait_time)
                 else:
                     logger.error(
                         "[PhantomWSClient] All %d connection attempts failed.", _MAX_RETRIES
@@ -165,14 +169,20 @@ class PhantomWSClient:
             self.connected = False
 
     async def _heartbeat(self) -> None:
-        """Background task — sends a ping every 30 s to keep the connection alive."""
+        """
+        Background task — sends a ping every 30 s to keep the connection alive.
+        Cloud Run closes WebSocket connections after 60 seconds of inactivity.
+        """
         while self.connected:
             await asyncio.sleep(30)
             try:
-                await self.websocket.ping()
-                logger.debug("[PhantomWSClient] Heartbeat ping sent.")
-            except Exception:
-                logger.warning("[PhantomWSClient] Heartbeat failed — connection lost.")
+                if self.websocket is not None:
+                    await self.websocket.ping()
+                    logger.debug("[PhantomWSClient] Heartbeat ping sent.")
+            except Exception as exc:
+                logger.warning(
+                    "[PhantomWSClient] Heartbeat failed — connection lost: %s", exc
+                )
                 self.connected = False
                 break
 
@@ -195,14 +205,24 @@ class PhantomWSClient:
         }
         await self._send(message)
 
-    async def send_task_result(self, task_id: str, status: str, goal: str) -> None:
+    async def send_task_result(
+        self,
+        task_id: str,
+        status: str,
+        goal: str,
+        steps_completed: list = None,
+        steps_failed: list = None,
+    ) -> None:
         """
         Send the final task result to the agent backend.
+        Ensures the message is sent before any disconnection.
 
         Args:
             task_id: Identifier for the completed task.
             status:  ``"completed"`` or ``"failed"``.
             goal:    The original goal string.
+            steps_completed: List of completed steps (optional).
+            steps_failed: List of failed steps (optional).
         """
         message = {
             "type": "task_result",
@@ -212,7 +232,35 @@ class PhantomWSClient:
                 "goal": goal,
             },
         }
+        
+        # Add steps if provided
+        if steps_completed is not None:
+            message["data"]["steps_completed"] = steps_completed
+        if steps_failed is not None:
+            message["data"]["steps_failed"] = steps_failed
+        
+        # Ensure connection is alive before sending
+        if not self.connected or self.websocket is None:
+            logger.warning(
+                "[PhantomWSClient] Connection lost before sending task_result. "
+                "Attempting to reconnect..."
+            )
+            try:
+                await self.connect()
+            except Exception as exc:
+                logger.error(
+                    "[PhantomWSClient] Failed to reconnect to send task_result: %s", exc
+                )
+                raise
+        
+        # Send the message
         await self._send(message)
+        
+        # Wait a moment to ensure message is sent
+        await asyncio.sleep(0.5)
+        logger.info(
+            "[PhantomWSClient] Task result sent: task_id=%s status=%s", task_id, status
+        )
 
     # ------------------------------------------------------------------ #
     # Inbound messages                                                     #
@@ -252,10 +300,34 @@ class PhantomWSClient:
     # ------------------------------------------------------------------ #
 
     async def _send(self, message: dict) -> None:
-        """Serialize *message* to JSON and send over the WebSocket."""
+        """
+        Serialize *message* to JSON and send over the WebSocket.
+        Handles reconnection if connection is lost.
+        """
         if not self.connected or self.websocket is None:
-            raise RuntimeError(
-                "PhantomWSClient._send: not connected. Call connect() first."
+            logger.warning(
+                "[PhantomWSClient._send] Not connected. Attempting to reconnect..."
             )
-        await self.websocket.send(json.dumps(message))
-        logger.debug("[PhantomWSClient] Sent type=%r", message.get("type"))
+            try:
+                await self.connect()
+            except Exception as exc:
+                raise RuntimeError(
+                    f"PhantomWSClient._send: not connected and reconnection failed: {exc}"
+                )
+        
+        try:
+            await self.websocket.send(json.dumps(message))
+            logger.debug("[PhantomWSClient] Sent type=%r", message.get("type"))
+        except websockets.ConnectionClosed as exc:
+            logger.warning(
+                "[PhantomWSClient._send] Connection closed while sending. "
+                "Attempting to reconnect and resend..."
+            )
+            try:
+                await self.connect()
+                await self.websocket.send(json.dumps(message))
+                logger.info("[PhantomWSClient] Message resent after reconnection.")
+            except Exception as reconnect_exc:
+                raise RuntimeError(
+                    f"PhantomWSClient._send: failed to reconnect and resend: {reconnect_exc}"
+                )

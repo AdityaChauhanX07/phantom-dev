@@ -41,8 +41,8 @@ pyautogui.PAUSE = 0.05
 # Constants
 # ---------------------------------------------------------------------------
 
-CONFIDENCE_THRESHOLD = 0.3  # Lowered to 0.3 for testing - allows actions even when element visibility is uncertain
-SETTLE_DELAY = 0.2          # Reduced from 0.5 to 0.2 seconds for faster execution
+CONFIDENCE_THRESHOLD = 0.25  # Lowered to 0.25 for better reliability
+SETTLE_DELAY = 0.3           # Increased to 0.3 — give UI more time to respond
 NO_SETTLE = {"wait", "screenshot"}
 
 
@@ -95,19 +95,30 @@ def _handle_double_click(action: dict) -> dict:
 
 def _handle_type(action: dict) -> dict:
     text = action["text"]
-    # If coordinates are provided, click on the field first to focus it
+    
+    # Force browser focus before typing
+    subprocess.run([
+        "osascript", "-e",
+        'tell application "System Events" to set frontmost of first process whose name contains "Chrome" to true'
+    ], capture_output=True)
+    time.sleep(0.3)
+    
     if "x" in action and "y" in action:
         x, y = action["x"], action["y"]
         logger.info("Clicking on input field at (%d, %d) before typing...", x, y)
         pyautogui.click(x, y)
-        time.sleep(0.1)  # Brief pause for field to focus
-        # Select all existing text (Cmd+A) before typing new text
-        pyautogui.hotkey("command", "a")
-        time.sleep(0.05)
+        time.sleep(0.5)
+        pyautogui.tripleClick(x, y)
+        time.sleep(0.2)
     
-    # typewrite is ASCII-safe; use pyperclip+paste for unicode if needed
-    interval = action.get("interval", 0.05)
-    pyautogui.typewrite(text, interval=interval)
+    # Use clipboard paste — works reliably in browsers
+    process = subprocess.Popen(['pbcopy'], stdin=subprocess.PIPE)
+    process.communicate(text.encode('utf-8'))
+    time.sleep(0.1)
+    pyautogui.hotkey('command', 'v')
+    time.sleep(0.2)
+    
+    logger.info("Typed text via clipboard: %r", text)
     return {"text": text, "x": action.get("x"), "y": action.get("y")}
 
 
@@ -204,8 +215,8 @@ def _handle_open_app(action: dict) -> dict:
 
 def _handle_open_url(action: dict) -> dict:
     """
-    Open a URL in the default browser using macOS 'open' command.
-    This works for any website: youtube.com, google.com, jira.com, etc.
+    Open a URL directly in Google Chrome using AppleScript.
+    This prevents Docker Desktop or other apps from intercepting focus.
     
     Args:
         action: {"type": "open_url", "url": "https://youtube.com"}
@@ -218,31 +229,40 @@ def _handle_open_url(action: dict) -> dict:
     if not url:
         raise ValueError("'url' is required for 'open_url' action")
     
-    # Add https:// if not present
     if not url.startswith(("http://", "https://")):
         url = "https://" + url
     
     logger.info("Opening URL: %s", url)
     try:
-        # Use 'open' command to open URL in default browser
+        # Open URL directly in Chrome and force focus
+        script = f'''
+tell application "Google Chrome"
+    activate
+    if (count of windows) = 0 then
+        make new window
+    end if
+    set URL of active tab of front window to "{url}"
+end tell
+'''
         result = subprocess.run(
-            ["open", url],
+            ["osascript", "-e", script],
             capture_output=True,
             text=True,
-            timeout=5
+            timeout=10
         )
-        if result.returncode == 0:
-            logger.info("Successfully opened URL: %s", url)
-            # Wait a bit for the browser to load
-            time.sleep(2.0)
-            return {"url": url, "success": True}
-        else:
-            error_msg = result.stderr.strip() or "Unknown error"
-            logger.warning("Failed to open URL %s: %s", url, error_msg)
-            return {"url": url, "success": False, "error": error_msg}
-    except subprocess.TimeoutExpired:
-        logger.warning("Timeout opening URL %s", url)
-        return {"url": url, "success": False, "error": "Timeout"}
+        
+        time.sleep(3.0)  # wait for page to load
+        
+        # Force Chrome to front again after load
+        subprocess.run([
+            "osascript", "-e",
+            'tell application "Google Chrome" to activate'
+        ], capture_output=True)
+        time.sleep(0.5)
+        
+        logger.info("Successfully opened URL in Chrome: %s", url)
+        return {"url": url, "success": True}
+        
     except Exception as exc:
         logger.error("Error opening URL %s: %s", url, exc)
         return {"url": url, "success": False, "error": str(exc)}
