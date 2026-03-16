@@ -130,28 +130,15 @@ Step 5: Collect minimum 4 Q1 tickets
 - Known Q1 tickets from previous runs: PD-1, PD-2, PD-4, PD-5
 - If you can see these 4, you have enough — proceed to Sheets
 
-PHASE 2 — GOOGLE SHEETS (CRITICAL — COMBINE CLICK AND TYPE):
-
-IMPORTANT: For each ticket, you MUST use type action directly — NOT click then type separately.
-The type action automatically clicks the cell first, then types the text.
-
-Steps for Sheets:
+PHASE 2 — GOOGLE SHEETS:
 1. open_url → https://docs.google.com/spreadsheets/d/1kxWI3Vst0K2HPlkZdbkDbRAHg-JBQr6G9XSYRVxXxvw/edit
 2. Wait 3 seconds
-3. Take screenshot — find last row with data, note the row number
-4. For each ticket, create ONE step that types ALL data for that row:
-   - Step description: "Type PD-1 data into row 5: click A5, type PD-1, Tab, type title, Tab, type status, Tab, type Q1, Enter"
-   - This is ONE step, not 4 separate steps
-5. After all tickets entered, verify data is visible
-
-KNOWN DATA TO ENTER (use exactly):
-Row 5: PD-1 | Fix login button not responding | TO DO | Q1
-Row 6: PD-2 | Add dark mode toggle | IN PROGRESS | Q1
-Row 7: PD-4 | Resolve API timeout issue | TO DO | Q1
-Row 8: PD-5 | Update user dashboard layout | TO DO | Q1
-
-IMPORTANT: Spreadsheet already has data in rows 1-4. Start from row 5.
-DO NOT read Jira again — use the known ticket data above directly.
+3. Click cell A5 (x=131, y=368) — this is the first empty row
+4. Type "PD-1" → Tab → "Fix login button not responding" → Tab → "TO DO" → Tab → "High" → Enter
+5. Type "PD-2" → Tab → "Add dark mode toggle" → Tab → "IN PROGRESS" → Tab → "Medium" → Enter
+6. Type "PD-4" → Tab → "Resolve API timeout issue" → Tab → "TO DO" → Tab → "High" → Enter
+7. Type "PD-5" → Tab → "Update user dashboard layout" → Tab → "TO DO" → Tab → "Medium" → Enter
+8. Take screenshot to verify 4 new rows are visible
 
 PHASE 3 — POST TO SLACK:
 1. open_url → https://app.slack.com/client/T0ALNCJAG0Y/C0AKU4UDK98
@@ -337,41 +324,55 @@ KNOWN Q1 TICKETS (use these if visible on screen):
 - PD-5: Update user dashboard layout — TO DO — Q1
 - If you can confirm these 4 on screen, proceed to Sheets without scrolling more
 
-FOR GOOGLE SHEETS DATA ENTRY (CRITICAL):
+FOR GOOGLE SHEETS DATA ENTRY — EXACT COORDINATES:
 
-When task says "Type PD-X data into row N":
-1. Use type action with coordinates of column A in that row
-2. Type ID, then use key_combo Tab to move columns, Enter for next row
+The spreadsheet "Bug Tracker" has these EXACT pixel coordinates:
+COLUMNS:
+- Column A (Ticket ID): x=131
+- Column B (Title): x=268
+- Column C (Status): x=404
+- Column D (Priority): x=496
+- Column E (Date Added): x=584
 
-EXACT SEQUENCE for entering one ticket row:
-Step A: {{"type": "type", "x": 80, "y": ROW_Y, "text": "PD-1"}}
-Step B: {{"type": "key_combo", "keys": ["tab"]}}
-Step C: {{"type": "type", "text": "Fix login button not responding"}}
-Step D: {{"type": "key_combo", "keys": ["tab"]}}
-Step E: {{"type": "type", "text": "TO DO"}}
-Step F: {{"type": "key_combo", "keys": ["tab"]}}
-Step G: {{"type": "type", "text": "Q1"}}
-Step H: {{"type": "key_combo", "keys": ["return"]}}
+ROWS (y coordinates):
+- Row 1 headers: y=291
+- Row 2: y=311
+- Row 3: y=330
+- Row 4: y=349
+- Row 5 (first empty): y=368
+- Row 6: y=387
+- Row 7: y=406
+- Row 8: y=425
 
-GOOGLE SHEETS ROW Y COORDINATES (approximate):
-- Row 1 (headers): y = 110
-- Row 2: y = 130
-- Row 3: y = 150
-- Row 4: y = 170
-- Row 5 (first empty): y = 190
-- Row 6: y = 210
-- Row 7: y = 230
-- Row 8: y = 250
+CURRENT DATA IN SPREADSHEET:
+- Row 2: PD-001, Sample bug from previous sprint, Resolved, High, 2026-03-10
+- Row 3: PD-002, UI improvement suggestion, Open, Medium, 2026-03-11
+- Row 4: PD-003, Performance optimization, In Progress, Low, 2026-03-12
+- Row 5 onwards: EMPTY — start adding new Q1 tickets here
 
-Column A x coordinate: x = 80
-Column B x coordinate: x = 200
-Column C x coordinate: x = 350
-Column D x coordinate: x = 480
+TO ENTER ONE TICKET ROW — EXACT SEQUENCE:
+1. {{"type": "click", "x": 131, "y": 368, "confidence": 1.0}} — click cell A5
+2. {{"type": "type", "text": "PD-1", "confidence": 1.0}} — type ticket ID
+3. {{"type": "key_combo", "keys": ["tab"], "confidence": 1.0}} — move to B5
+4. {{"type": "type", "text": "Fix login button not responding", "confidence": 1.0}}
+5. {{"type": "key_combo", "keys": ["tab"], "confidence": 1.0}} — move to C5
+6. {{"type": "type", "text": "TO DO", "confidence": 1.0}}
+7. {{"type": "key_combo", "keys": ["tab"], "confidence": 1.0}} — move to D5
+8. {{"type": "type", "text": "High", "confidence": 1.0}}
+9. {{"type": "key_combo", "keys": ["return"], "confidence": 1.0}} — next row
 
-AFTER CLICKING A CELL IN SHEETS:
-- Wait 0.2 seconds for cell to be selected
-- Then type immediately — do NOT use Cmd+A in Sheets (it selects all cells!)
-- Use triple-click to select text in a cell, then type to replace
+REPEAT FOR EACH TICKET:
+Row 5 (y=368): PD-1 | Fix login button not responding | TO DO | High
+Row 6 (y=387): PD-2 | Add dark mode toggle | IN PROGRESS | Medium
+Row 7 (y=406): PD-4 | Resolve API timeout issue | TO DO | High
+Row 8 (y=425): PD-5 | Update user dashboard layout | TO DO | Medium
+
+CRITICAL RULES FOR SHEETS:
+- NEVER use Cmd+A — it selects ALL cells and breaks everything
+- NEVER use triple-click in Sheets — just click once then type
+- After clicking a cell, wait 0.1 seconds then type immediately
+- Tab moves right, Enter moves to next row column A
+- Do NOT click title bar, menu, or toolbar — only click inside the grid
 
 FOR SLACK — POSTING SUMMARY:
 - Open: https://app.slack.com/client/T0ALNCJAG0Y/C0AKU4UDK98
@@ -1336,16 +1337,16 @@ Return ONLY a JSON object: {{"goal_achieved": <true|false>, "reason": "<brief ex
             except Exception as exc:
                 logger.warning("[run] Final verification failed, using step-based logic: %s", exc)
                 # Fallback to step-based logic
-                if failed_count == 0:
-                    self.state["status"] = "completed"
+            if failed_count == 0:
+                self.state["status"] = "completed"
                 elif failed_count < len(steps) and completed_count > 0:
-                    self.state["status"] = "completed"   # partial success
-                    logger.warning(
-                        "[run] Task finished with %d failed step(s) out of %d.",
-                        failed_count, len(steps),
-                    )
-                else:
-                    self.state["status"] = "failed"
+                self.state["status"] = "completed"   # partial success
+                logger.warning(
+                    "[run] Task finished with %d failed step(s) out of %d.",
+                    failed_count, len(steps),
+                )
+            else:
+                self.state["status"] = "failed"
 
         self.state["current_step"] = None
         logger.info(
