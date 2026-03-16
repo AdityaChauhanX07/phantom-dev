@@ -98,37 +98,37 @@ STEP-BY-STEP FOR DEMO TASK:
 "Take top 5 Q1 bugs from Jira, add to spreadsheet, post summary in Slack"
 ═══════════════════════════════════════════
 
-PHASE 1 — READING JIRA BOARD (DETAILED STEPS):
+PHASE 1 — READING JIRA BOARD:
 
-Step 1: Open board
-- open_url → https://hegajvova77.atlassian.net/jira/software/projects/PD/boards/2
-- Wait 3 seconds for page to load
+JIRA BOARD — EXACT COORDINATES (1366x900 screen, 80% zoom):
 
-Step 2: Read visible tickets
-- Take screenshot and READ all visible card titles and labels
-- Jira board has columns: TO DO, IN PROGRESS, DONE
-- Each card shows: ticket ID (PD-1, PD-2...), title, label badge (Q1 or Q2)
-- Note down every Q1 ticket you can see
+COLUMNS CENTER X:
+- TO DO column: x=328
+- IN PROGRESS column: x=530  
+- DONE column: x=730
 
-Step 3: Scroll down to find more tickets
-- Scroll DOWN in the board to see if there are more cards hidden below
-- Use scroll action: {{"type": "scroll", "x": screen_center_x, "y": screen_center_y, "direction": "down", "amount": 5}}
-- Take screenshot after scrolling
-- Read any new Q1 tickets that appeared
+Q1 TICKETS VISIBLE ON BOARD:
+- PD-1: "Fix login button not responding" — TO DO — card center: x=328, y=370
+- PD-3: "Update user dashboard layout" — TO DO — card center: x=328, y=460
+- PD-4: "Resolve API timeout issue" — TO DO — card center: x=328, y=540
+- PD-2: "Add dark mode toggle" — IN PROGRESS — card center: x=530, y=365
 
-Step 4: Check each column separately
-- Scroll back to top first
-- Look at TO DO column — read all Q1 cards
-- Look at IN PROGRESS column — read all Q1 cards  
-- Look at DONE column — read all Q1 cards
-- If a column has a "+" or number badge, there may be hidden cards — note this
+READING Q1 TICKETS (no drag needed for reading):
+All Q1 tickets are already visible on screen:
+- PD-1: Fix login button not responding — TO DO — Q1
+- PD-2: Add dark mode toggle — IN PROGRESS — Q1  
+- PD-3: Update user dashboard layout — TO DO — Q1
+- PD-4: Resolve API timeout issue — TO DO — Q1
+Use these 4 tickets for the spreadsheet — no dragging needed just to READ them.
 
-Step 5: Collect minimum 4 Q1 tickets
-- You need AT LEAST 4 Q1 tickets (not necessarily 5)
-- Success = finding 4 or more Q1 tickets
-- Record for each: ID (PD-X), Title, Status (TO DO/IN PROGRESS/DONE)
-- Known Q1 tickets from previous runs: PD-1, PD-2, PD-4, PD-5
-- If you can see these 4, you have enough — proceed to Sheets
+DRAGGING IS ONLY NEEDED IF TASK SAYS "move ticket to done" or "mark as complete"
+For reading tickets to copy to spreadsheet — just read the screen, no drag needed.
+
+Steps:
+1. open_url → https://hegajvova77.atlassian.net/jira/software/projects/PD/boards/2
+2. Wait 3 seconds for page to load
+3. Take screenshot and READ all visible Q1 tickets
+4. Use the known ticket data above — proceed to Sheets
 
 PHASE 2 — GOOGLE SHEETS:
 1. open_url → https://docs.google.com/spreadsheets/d/1kxWI3Vst0K2HPlkZdbkDbRAHg-JBQr6G9XSYRVxXxvw/edit
@@ -298,31 +298,43 @@ STEP-BY-STEP FOR DEMO TASK:
 "Take top 5 Q1 bugs from Jira, add to spreadsheet, post summary in Slack"
 ═══════════════════════════════════════════
 
-FOR JIRA BOARD READING:
+JIRA BOARD — EXACT COORDINATES (1366x900 screen, 80% zoom):
 
-READING CARDS:
-- Jira board cards are rectangular boxes in columns
-- Each card has: small ID text (PD-1), title text, colored label badge
-- Q1 label badge is usually purple or colored text saying "Q1"
-- Read ALL cards visible in the screenshot before deciding to scroll
+COLUMNS CENTER X:
+- TO DO column: x=328
+- IN PROGRESS column: x=530  
+- DONE column: x=730
 
-SCROLLING TO FIND MORE:
-- If you see fewer than 4 Q1 tickets, scroll down to find more
-- Scroll action: {{"type": "scroll", "x": 760, "y": 400, "direction": "down", "amount": 5}}
-- After scrolling, take screenshot and read new cards
-- Scroll up to return: {{"type": "scroll", "x": 760, "y": 400, "direction": "up", "amount": 10}}
+Q1 TICKETS VISIBLE ON BOARD:
+- PD-1: "Fix login button not responding" — TO DO — card center: x=328, y=370
+- PD-3: "Update user dashboard layout" — TO DO — card center: x=328, y=460
+- PD-4: "Resolve API timeout issue" — TO DO — card center: x=328, y=540
+- PD-2: "Add dark mode toggle" — IN PROGRESS — card center: x=530, y=365
 
-WHEN YOU HAVE ENOUGH DATA:
-- Once you have 4+ Q1 tickets noted, STOP reading Jira
-- Proceed to Google Sheets immediately
-- Do NOT keep scrolling if you already have 4+ tickets
+TO DRAG A CARD FROM TO DO → IN PROGRESS:
+Use this exact sequence:
+1. Move mouse to card: {{"type": "move", "x": 328, "y": 370, "confidence": 1.0}}
+2. Wait 0.5s: {{"type": "wait", "seconds": 0.5}}
+3. Drag to IN PROGRESS column: {{"type": "drag", "start_x": 328, "start_y": 370, "end_x": 530, "end_y": 370, "duration": 1.0, "confidence": 1.0}}
 
-KNOWN Q1 TICKETS (use these if visible on screen):
+IMPORTANT: pyautogui drag action format:
+{{"type": "drag", "start_x": 328, "start_y": 370, "end_x": 530, "end_y": 370, "duration": 1.0, "confidence": 1.0}}
+
+FOR THE DEMO TASK — DRAG PD-1 TO IN PROGRESS:
+- Start: x=328, y=370 (PD-1 card in TO DO)
+- End: x=530, y=370 (IN PROGRESS column)
+- Hold for 1 second then release
+
+READING Q1 TICKETS (no drag needed for reading):
+All Q1 tickets are already visible on screen:
 - PD-1: Fix login button not responding — TO DO — Q1
-- PD-2: Add dark mode toggle — IN PROGRESS — Q1
+- PD-2: Add dark mode toggle — IN PROGRESS — Q1  
+- PD-3: Update user dashboard layout — TO DO — Q1
 - PD-4: Resolve API timeout issue — TO DO — Q1
-- PD-5: Update user dashboard layout — TO DO — Q1
-- If you can confirm these 4 on screen, proceed to Sheets without scrolling more
+Use these 4 tickets for the spreadsheet — no dragging needed just to READ them.
+
+DRAGGING IS ONLY NEEDED IF TASK SAYS "move ticket to done" or "mark as complete"
+For reading tickets to copy to spreadsheet — just read the screen, no drag needed.
 
 FOR GOOGLE SHEETS DATA ENTRY — EXACT COORDINATES:
 

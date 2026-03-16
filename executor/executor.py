@@ -152,6 +152,37 @@ def _handle_move(action: dict) -> dict:
     return {"x": x, "y": y}
 
 
+def _handle_drag(action: dict) -> dict:
+    """Drag from start coordinates to end coordinates."""
+    start_x = action["start_x"]
+    start_y = action["start_y"]
+    end_x = action["end_x"]
+    end_y = action["end_y"]
+    duration = action.get("duration", 1.0)
+    
+    _check_bounds(start_x, start_y)
+    _check_bounds(end_x, end_y)
+    
+    logger.info("Dragging from (%d,%d) to (%d,%d)", start_x, start_y, end_x, end_y)
+    
+    # Move to start position
+    pyautogui.moveTo(start_x, start_y, duration=0.3)
+    time.sleep(0.3)
+    
+    # Hold mouse button and drag
+    pyautogui.mouseDown(start_x, start_y, button='left')
+    time.sleep(0.5)  # hold before dragging — important for Jira
+    pyautogui.moveTo(end_x, end_y, duration=duration)
+    time.sleep(0.3)  # hold at destination
+    pyautogui.mouseUp(end_x, end_y, button='left')
+    
+    return {
+        "start_x": start_x, "start_y": start_y,
+        "end_x": end_x, "end_y": end_y,
+        "duration": duration
+    }
+
+
 def _handle_wait(action: dict) -> dict:
     seconds = float(action.get("seconds", 1.0))
     if seconds < 0:
@@ -269,6 +300,7 @@ _HANDLERS: dict[str, Any] = {
     "key_combo":    _handle_key_combo,
     "scroll":       _handle_scroll,
     "move":         _handle_move,
+    "drag":         _handle_drag,
     "wait":         _handle_wait,
     "screenshot":   _handle_screenshot,
     "open_app":     _handle_open_app,
