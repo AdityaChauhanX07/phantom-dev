@@ -196,7 +196,7 @@ class VoiceGateway:
     # Audio streaming                                                      #
     # ------------------------------------------------------------------ #
 
-    async def stream_audio(self, audio_chunk: bytes) -> str | None:
+    async def stream_audio(self, audio_chunk: bytes) -> str | bytes | None:
         """
         Forward *audio_chunk* to the Gemini Live session and process the response.
 
@@ -262,28 +262,6 @@ class VoiceGateway:
         except Exception as exc:
             logger.debug("[VoiceGateway:%s] No response yet or error: %s", self._session_id, exc)
         
-        return None
-
-        # ── Interpret text response ──────────────────────────────────────
-        if response_text:
-            stripped = response_text.strip()
-            if stripped.upper().startswith("TASK:"):
-                goal = stripped[5:].strip()
-                logger.info(
-                    "[VoiceGateway:%s] Task detected: %r", self._session_id, goal
-                )
-                await self._post_task_to_agent(goal)
-                return goal
-
-            # Non-task text — treat as status update
-            logger.debug(
-                "[VoiceGateway:%s] Status text from Gemini: %r", self._session_id, stripped
-            )
-            return stripped
-
-        if response_audio:
-            return response_audio   # type: ignore[return-value]  # bytes
-
         return None
 
     async def finish_speech_and_get_response(self) -> str | bytes | None:

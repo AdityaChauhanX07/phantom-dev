@@ -271,7 +271,7 @@ def execute_action(action: dict) -> dict:
             "error":   None | "<error message>",
         }
     """
-    action_type = action.get("type")
+    action_type: str = action.get("type", "")
 
     # ── Confidence gate ─────────────────────────────────────────────────────
     confidence = action.get("confidence")

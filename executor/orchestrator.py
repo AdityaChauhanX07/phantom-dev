@@ -26,6 +26,7 @@ import logging
 import re
 import time
 from copy import deepcopy
+from typing import Any
 
 import pyautogui
 
@@ -255,7 +256,7 @@ class TaskOrchestrator:
     # Rate-limit-aware Gemini wrapper                                      #
     # ------------------------------------------------------------------ #
 
-    def _gemini_call(self, contents: list) -> object:
+    def _gemini_call(self, contents: list) -> Any:
         """Call Gemini with rate-limit retry."""
         def _do_call():
             return self.client._client.models.generate_content(
@@ -485,7 +486,8 @@ class TaskOrchestrator:
                     completion_criteria=criteria,
                 )
                 resp = self._gemini_call([check_prompt, _inline_image(final_b64)])
-                check = _extract_json(resp.text, label="final_check")
+                raw_check = _extract_json(resp.text, label="final_check")
+                check: dict = raw_check if isinstance(raw_check, dict) else {}
 
                 if check.get("goal_complete", False):
                     logger.info("[run] Final check: goal IS complete — %s", check.get("reason", ""))
