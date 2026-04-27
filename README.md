@@ -2,7 +2,7 @@
 
 Autonomous AI computer operator. Speak a goal, watch it execute. Vision-first agent that operates any software without APIs or DOM access.
 
-Built for the [Gemini Live Agent Challenge](https://ai.google.dev).
+Built for the [Gemini Live Agent Challenge](https://geminiliveagentchallenge.devpost.com/).
 
 ---
 
