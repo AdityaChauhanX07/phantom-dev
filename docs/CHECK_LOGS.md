@@ -1,4 +1,4 @@
-# Как проверить логи всех компонентов
+# How to Check Logs for All Components
 
 ## 1. Voice Gateway (Cloud Run)
 
@@ -9,13 +9,13 @@ gcloud run services logs read phantom-voice \
   --limit=50
 ```
 
-**Что искать:**
-- ✅ `GeminiLiveGateway using API key for Live API`
-- ✅ `[/stt-task] Using Vertex AI — project=phantom-dev-489603`
-- ✅ `Task created in agent — task_id=...`
-- ❌ НЕТ ошибок `429` или `1008`
+**What to look for:**
+- `GeminiLiveGateway using API key for Live API`
+- `[/stt-task] Using Vertex AI — project=phantom-dev-489603`
+- `Task created in agent — task_id=...`
+- NO `429` or `1008` errors
 
-**Последние 20 строк:**
+**Last 20 lines:**
 ```bash
 gcloud run services logs read phantom-voice \
   --region=us-central1 \
@@ -34,12 +34,12 @@ gcloud run services logs read phantom-agent \
   --limit=50
 ```
 
-**Что искать:**
-- ✅ `[POST /task] Task created — task_id=...`
-- ✅ `[WS /ws/executor] Task dispatched to executor`
-- ✅ `connected_executors: 1` (если executor подключён)
+**What to look for:**
+- `[POST /task] Task created — task_id=...`
+- `[WS /ws/executor] Task dispatched to executor`
+- `connected_executors: 1` (if executor is connected)
 
-**Последние 20 строк:**
+**Last 20 lines:**
 ```bash
 gcloud run services logs read phantom-agent \
   --region=us-central1 \
@@ -49,19 +49,19 @@ gcloud run services logs read phantom-agent \
 
 ---
 
-## 3. Executor (локально, в терминале)
+## 3. Executor (locally, in terminal)
 
-**Логи видны прямо в терминале, где запущен executor.**
+**Logs are visible directly in the terminal where the executor is running.**
 
-**Что искать:**
-- ✅ `GeminiClient initialised with Vertex AI — project=phantom-dev-489603`
-- ✅ `Connected to agent at wss://...`
-- ✅ `Phantom is online. Waiting for tasks...`
-- ✅ `Received task: '...'`
-- ✅ `Executing: {'type': 'click', ...}`
-- ❌ НЕТ ошибок `Your default credentials were not found`
+**What to look for:**
+- `GeminiClient initialised with Vertex AI — project=phantom-dev-489603`
+- `Connected to agent at wss://...`
+- `Phantom is online. Waiting for tasks...`
+- `Received task: '...'`
+- `Executing: {'type': 'click', ...}`
+- NO `Your default credentials were not found` errors
 
-**Если нужно сохранить логи в файл:**
+**To save logs to a file:**
 ```bash
 cd executor
 PHANTOM_MODE=cloud python3 /Users/vladimirkhegai/Desktop/gemini_hackathon/phantom-dev/executor/phantom.py 2>&1 | tee executor.log
@@ -69,25 +69,25 @@ PHANTOM_MODE=cloud python3 /Users/vladimirkhegai/Desktop/gemini_hackathon/phanto
 
 ---
 
-## 4. Dashboard (в браузере)
+## 4. Dashboard (in browser)
 
-**Открой DevTools (F12) → Console**
+**Open DevTools (F12) → Console**
 
-**Что искать:**
-- ✅ `WebSocket connected`
-- ✅ `Received event: task_queued`
-- ✅ `Received event: task_result`
-- ❌ НЕТ ошибок WebSocket
+**What to look for:**
+- `WebSocket connected`
+- `Received event: task_queued`
+- `Received event: task_result`
+- NO WebSocket errors
 
 **Network tab:**
-- Проверь WebSocket connection к agent
-- Должен быть статус `101 Switching Protocols`
+- Check the WebSocket connection to agent
+- Should show status `101 Switching Protocols`
 
 ---
 
-## Быстрые команды (скопируй и вставь)
+## Quick Commands (copy and paste)
 
-### Все логи за последние 5 минут
+### All logs from the last 5 minutes
 
 ```bash
 # Voice gateway
@@ -103,23 +103,23 @@ gcloud run services logs read phantom-agent \
   --limit=50
 ```
 
-### Только ошибки
+### Errors only
 
 ```bash
-# Voice gateway (только ERROR)
+# Voice gateway (ERROR only)
 gcloud run services logs read phantom-voice \
   --region=us-central1 \
   --project=phantom-dev-489603 \
   --limit=100 | grep ERROR
 
-# Agent (только ERROR)
+# Agent (ERROR only)
 gcloud run services logs read phantom-agent \
   --region=us-central1 \
   --project=phantom-dev-489603 \
   --limit=100 | grep ERROR
 ```
 
-### Следить за логами в реальном времени
+### Stream logs in real time
 
 ```bash
 # Voice gateway (stream)
@@ -135,7 +135,7 @@ gcloud run services logs tail phantom-agent \
 
 ---
 
-## Что проверять после голосовой команды
+## What to Check After a Voice Command
 
 ### 1. Voice Gateway
 
@@ -146,7 +146,7 @@ gcloud run services logs read phantom-voice \
   --limit=30 | grep -E "stt-task|Task created"
 ```
 
-**Должно быть:**
+**Expected:**
 - `[/stt-task] Using Vertex AI`
 - `Task created in agent — task_id=...`
 
@@ -159,13 +159,13 @@ gcloud run services logs read phantom-agent \
   --limit=30 | grep -E "Task created|dispatched"
 ```
 
-**Должно быть:**
+**Expected:**
 - `[POST /task] Task created — task_id=...`
 - `[WS /ws/executor] Task dispatched to executor`
 
 ### 3. Executor
 
-**В терминале executor должно быть:**
+**In the executor terminal you should see:**
 - `Received task: '...'`
 - `GeminiClient initialised with Vertex AI`
 - `Executing: ...`
@@ -175,26 +175,26 @@ gcloud run services logs read phantom-agent \
 
 ## Troubleshooting
 
-### Нет логов в Cloud Run
+### No logs in Cloud Run
 
-**Проверь, что сервисы запущены:**
+**Check that services are running:**
 ```bash
 gcloud run services list --project=phantom-dev-489603
 ```
 
-### Executor не показывает логи
+### Executor shows no logs
 
-**Проверь, что executor запущен:**
-- Должно быть: `Phantom is online. Waiting for tasks...`
+**Check that executor is running:**
+- Should show: `Phantom is online. Waiting for tasks...`
 
-### Dashboard не показывает события
+### Dashboard shows no events
 
-**Проверь консоль браузера (F12):**
-- Должно быть: `WebSocket connected`
-- НЕТ ошибок WebSocket
+**Check browser console (F12):**
+- Should show: `WebSocket connected`
+- NO WebSocket errors
 
 ---
 
-## Готово! 🚀
+## Done
 
-Теперь ты знаешь, как проверить логи всех компонентов системы.
+Now you know how to check the logs for all system components.

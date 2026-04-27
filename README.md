@@ -290,8 +290,8 @@ phantom-dev/
 
 ## Contributors
 
-- [AdityaChauhanX07](https://github.com/AdityaChauhanX07)
-- [KhegaiVladimir](https://github.com/KhegaiVladimir)
+- [Aditya Chauhan](https://github.com/AdityaChauhanX07)
+- [Vladimir Khegai](https://github.com/KhegaiVladimir)
 
 ---
 

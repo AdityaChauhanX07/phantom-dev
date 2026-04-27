@@ -2,7 +2,7 @@
 
 ## Changes Made
 
-✅ **Updated `voice/main.py`:**
+**Updated `voice/main.py`:**
 - `/stt-task` endpoint now uses Vertex AI instead of AI Studio
 - GCP_PROJECT_ID set to `phantom-dev-489603` (existing project)
 - GCP_LOCATION set to `us-central1`
@@ -65,7 +65,7 @@ gcloud run deploy phantom-voice \
   --project=phantom-dev-489603
 ```
 
-**Important:** 
+**Important:**
 - Removed `GEMINI_API_KEY` from env vars (not needed for Vertex AI)
 - Added `GCP_PROJECT_ID` and `GCP_LOCATION`
 
@@ -146,18 +146,18 @@ gcloud config get-value project
 
 ## Benefits
 
-✅ **No more rate limits** — Vertex AI has much higher quotas  
-✅ **Better for production** — Designed for cloud workloads  
-✅ **Cost tracking** — Usage visible in GCP console  
-✅ **Scalability** — Handles more concurrent requests
+- **No more rate limits** — Vertex AI has much higher quotas
+- **Better for production** — Designed for cloud workloads
+- **Cost tracking** — Usage visible in GCP console
+- **Scalability** — Handles more concurrent requests
 
 ---
 
 ## After Deployment
 
-1. ✅ Test voice command
-2. ✅ Verify no 429 errors
-3. ✅ Check Vertex AI usage in GCP console
-4. ✅ Continue integration testing
+1. Test voice command
+2. Verify no 429 errors
+3. Check Vertex AI usage in GCP console
+4. Continue integration testing
 
-**Ready to deploy!** 🚀
+**Ready to deploy.**

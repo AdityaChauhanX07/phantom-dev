@@ -1,36 +1,36 @@
-# Исправление: Деплой Voice Gateway с правильными настройками
+# Fix: Deploy Voice Gateway with Correct Settings
 
-## Проблема
+## Problem
 
-В логах видно:
-- ❌ `GeminiLiveGateway using Vertex AI` (старый код)
-- ❌ `GEMINI_API_KEY is not set` (ключ не установлен)
-- ❌ Ошибка 1008 при попытке использовать Live API через Vertex AI
+The logs show:
+- `GeminiLiveGateway using Vertex AI` (old code)
+- `GEMINI_API_KEY is not set` (key not set)
+- Error 1008 when trying to use Live API via Vertex AI
 
-## Решение
+## Solution
 
-### 1. Убедись, что GEMINI_API_KEY установлен
+### 1. Ensure GEMINI_API_KEY is set
 
 ```bash
-# Проверь, есть ли ключ в окружении
+# Check if the key is in the environment
 echo $GEMINI_API_KEY
 
-# Если нет, установи его (замени на свой ключ)
-export GEMINI_API_KEY="твой_ключ_здесь"
+# If not, set it (replace with your key)
+export GEMINI_API_KEY="your_key_here"
 ```
 
-### 2. Задеплой обновлённый код
+### 2. Deploy the updated code
 
 ```bash
 ./deploy-voice.sh
 ```
 
-Скрипт автоматически:
-- Соберёт Docker image с исправленным кодом
-- Установит `GEMINI_API_KEY` в Cloud Run
-- Установит `GCP_PROJECT_ID` для `/stt-task` (Vertex AI)
+The script will automatically:
+- Build the Docker image with the fixed code
+- Set `GEMINI_API_KEY` in Cloud Run
+- Set `GCP_PROJECT_ID` for `/stt-task` (Vertex AI)
 
-### 3. Проверь деплой
+### 3. Verify the deployment
 
 ```bash
 gcloud run services describe phantom-voice \
@@ -39,11 +39,11 @@ gcloud run services describe phantom-voice \
   --format="value(spec.template.spec.containers[0].env)" | grep -E "GEMINI_API_KEY|GCP_PROJECT_ID"
 ```
 
-Должно показать:
-- `GEMINI_API_KEY=...` ✅
-- `GCP_PROJECT_ID=phantom-dev-489603` ✅
+Should show:
+- `GEMINI_API_KEY=...`
+- `GCP_PROJECT_ID=phantom-dev-489603`
 
-### 4. Проверь логи
+### 4. Check the logs
 
 ```bash
 gcloud run services logs read phantom-voice \
@@ -52,30 +52,30 @@ gcloud run services logs read phantom-voice \
   --limit=20
 ```
 
-**Ожидаемые логи:**
-- ✅ `GeminiLiveGateway using API key for Live API` (не Vertex AI!)
-- ✅ `[/stt-task] Using Vertex AI — project=phantom-dev-489603` (для /stt-task)
-- ❌ НЕ должно быть: `GEMINI_API_KEY is not set`
+**Expected logs:**
+- `GeminiLiveGateway using API key for Live API` (not Vertex AI!)
+- `[/stt-task] Using Vertex AI — project=phantom-dev-489603` (for /stt-task)
+- Should NOT show: `GEMINI_API_KEY is not set`
 
 ---
 
-## Итоговая схема
+## Architecture Summary
 
-- **Live API (WebSocket `/stream`)** → использует `GEMINI_API_KEY` ✅
-- **`/stt-task` endpoint** → использует Vertex AI (`GCP_PROJECT_ID`) ✅
+- **Live API (WebSocket `/stream`)** → uses `GEMINI_API_KEY`
+- **`/stt-task` endpoint** → uses Vertex AI (`GCP_PROJECT_ID`)
 
 ---
 
-## Если GEMINI_API_KEY не установлен
+## If GEMINI_API_KEY is Not Set
 
-1. Получи ключ: https://aistudio.google.com/apikey
-2. Установи в окружении:
+1. Get the key: https://aistudio.google.com/apikey
+2. Set it in your environment:
    ```bash
-   export GEMINI_API_KEY="твой_ключ"
+   export GEMINI_API_KEY="your_key"
    ```
-3. Задеплой:
+3. Deploy:
    ```bash
    ./deploy-voice.sh
    ```
 
-**Готово!** 🚀
+**Done.**

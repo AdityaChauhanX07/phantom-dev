@@ -1,90 +1,90 @@
-# 🧪 Полное руководство по тестированию Phantom Dev
+# Complete Testing Guide for Phantom Dev
 
-## 📋 Подготовка (один раз)
+## Preparation (Once)
 
-### 1. Проверь, что все сервисы запущены
+### 1. Verify All Services Are Running
 
-**Cloud Run сервисы:**
+**Cloud Run services:**
 ```bash
 gcloud run services list --project=phantom-dev-489603
 ```
 
-Должны быть:
-- ✅ `phantom-agent` (статус: Ready)
-- ✅ `phantom-voice` (статус: Ready)
+Should show:
+- `phantom-agent` (status: Ready)
+- `phantom-voice` (status: Ready)
 
-**Локальные сервисы:**
-- ✅ Dashboard: `npm run dev` (должен быть запущен)
-- ✅ Executor: будет запущен позже
+**Local services:**
+- Dashboard: `npm run dev` (should be running)
+- Executor: will be started later
 
 ---
 
-## 🚀 Быстрый старт (каждый раз перед тестами)
+## Quick Start (Before Each Test Session)
 
-### Шаг 1: Запустить Dashboard
+### Step 1: Start the Dashboard
 
 ```bash
 cd dashboard
 npm run dev
 ```
 
-**Проверь:**
-- Открой `http://localhost:3000` → должен загрузиться dashboard
-- В консоли браузера (F12) должно быть: `WebSocket connected`
+**Verify:**
+- Open `http://localhost:3000` → dashboard should load
+- Browser console (F12) should show: `WebSocket connected`
 
-### Шаг 2: Запустить Executor
+### Step 2: Start the Executor
 
 ```bash
 cd executor
 PHANTOM_MODE=cloud python3 phantom.py
 ```
 
-**Проверь в логах executor:**
-- ✅ `GeminiClient initialised with Vertex AI — project=phantom-dev-489603`
-- ✅ `Connected to agent at wss://...`
-- ✅ `Phantom is online. Waiting for tasks...`
+**Verify in executor logs:**
+- `GeminiClient initialised with Vertex AI — project=phantom-dev-489603`
+- `Connected to agent at wss://...`
+- `Phantom is online. Waiting for tasks...`
 
-**Проверь в dashboard:**
-- Должно появиться: **"1 executor connected"** (зелёный статус)
+**Verify in dashboard:**
+- Should show: **"1 executor connected"** (green status)
 
 ---
 
-## 🎯 Тесты по уровням
+## Tests by Level
 
-### Уровень 1: Проверка подключений
+### Level 1: Connection Checks
 
-#### Тест 1.1: Dashboard → Agent
-1. Открой `http://localhost:3000`
-2. Проверь статус: **"WebSocket connected"** (зелёный)
-3. Если красный — проверь `.env.local` в `dashboard/`
+#### Test 1.1: Dashboard → Agent
+1. Open `http://localhost:3000`
+2. Check status: **"WebSocket connected"** (green)
+3. If red — check `.env.local` in `dashboard/`
 
-#### Тест 1.2: Executor → Agent
-1. Запусти executor (см. выше)
-2. В логах executor должно быть: `Connected to agent at wss://...`
-3. В dashboard должно быть: **"1 executor connected"**
+#### Test 1.2: Executor → Agent
+1. Start the executor (see above)
+2. Executor logs should show: `Connected to agent at wss://...`
+3. Dashboard should show: **"1 executor connected"**
 
-#### Тест 1.3: Voice Gateway → Agent
+#### Test 1.3: Voice Gateway → Agent
 ```bash
 curl https://phantom-voice-874381233509.us-central1.run.app/health
 ```
 
-Должно вернуть: `{"status":"ok","active_session":false}`
+Should return: `{"status":"ok","active_session":false}`
 
 ---
 
-### Уровень 2: Простые задачи (без executor)
+### Level 2: Simple Tasks (Without Executor)
 
-#### Тест 2.1: Голосовая команда → Задача создана
+#### Test 2.1: Voice Command → Task Created
 
-1. Открой `http://localhost:3000/voice-test.html`
-2. Нажми кнопку микрофона
-3. Скажи: **"Hey Phantom, test task"**
-4. Проверь:
-   - ✅ В консоли браузера: `HTTP TASK DETECTED: test task (task_id=...)`
-   - ✅ В dashboard: появилась новая задача со статусом `queued`
-   - ✅ В логах voice gateway (см. ниже): `Task created in agent`
+1. Open `http://localhost:3000/voice-test.html`
+2. Click the microphone button
+3. Say: **"Hey Phantom, test task"**
+4. Verify:
+   - Browser console: `HTTP TASK DETECTED: test task (task_id=...)`
+   - Dashboard: a new task with status `queued` appeared
+   - Voice gateway logs (see below): `Task created in agent`
 
-**Проверить логи voice gateway:**
+**Check voice gateway logs:**
 ```bash
 gcloud run services logs read phantom-voice \
   --region=us-central1 \
@@ -92,7 +92,7 @@ gcloud run services logs read phantom-voice \
   --limit=20 | grep -E "stt-task|Task created"
 ```
 
-**Проверить логи agent:**
+**Check agent logs:**
 ```bash
 gcloud run services logs read phantom-agent \
   --region=us-central1 \
@@ -102,100 +102,100 @@ gcloud run services logs read phantom-agent \
 
 ---
 
-### Уровень 3: Простые задачи (с executor)
+### Level 3: Simple Tasks (With Executor)
 
-#### Тест 3.1: Открыть приложение
+#### Test 3.1: Open an Application
 
-**Команда:** "Hey Phantom, open Safari"
+**Command:** "Hey Phantom, open Safari"
 
-**Ожидаемое поведение:**
-1. Executor получает задачу
-2. Executor открывает Safari (через `open_app`)
-3. Safari открывается на экране
-4. Задача завершается со статусом `completed`
+**Expected behavior:**
+1. Executor receives the task
+2. Executor opens Safari (via `open_app`)
+3. Safari opens on screen
+4. Task completes with status `completed`
 
-**Проверь:**
-- ✅ В логах executor: `Executing: {'type': 'open_app', 'app_name': 'Safari'}`
-- ✅ Safari открылся на экране
-- ✅ В dashboard: статус задачи → `completed`
+**Verify:**
+- Executor logs: `Executing: {'type': 'open_app', 'app_name': 'Safari'}`
+- Safari opened on screen
+- Dashboard: task status → `completed`
 
-#### Тест 3.2: Открыть сайт
+#### Test 3.2: Open a Website
 
-**Команда:** "Hey Phantom, open Google"
+**Command:** "Hey Phantom, open Google"
 
-**Ожидаемое поведение:**
-1. Executor открывает Google в браузере (через `open_url`)
-2. Google открывается в новой вкладке
-3. Задача завершается
+**Expected behavior:**
+1. Executor opens Google in the browser (via `open_url`)
+2. Google opens in a new tab
+3. Task completes
 
-**Проверь:**
-- ✅ В логах executor: `Executing: {'type': 'open_url', 'url': 'https://www.google.com'}`
-- ✅ Google открылся в браузере
-- ✅ В dashboard: статус → `completed`
+**Verify:**
+- Executor logs: `Executing: {'type': 'open_url', 'url': 'https://www.google.com'}`
+- Google opened in the browser
+- Dashboard: status → `completed`
 
-#### Тест 3.3: Поиск в Google
+#### Test 3.3: Search in Google
 
-**Команда:** "Hey Phantom, open Google and search for Gemini"
+**Command:** "Hey Phantom, open Google and search for Gemini"
 
-**Ожидаемое поведение:**
-1. Executor открывает Google
-2. Executor находит поисковую строку и кликает по ней
-3. Executor вводит "Gemini"
-4. Executor нажимает Enter
-5. Появляются результаты поиска
-6. Задача завершается
+**Expected behavior:**
+1. Executor opens Google
+2. Executor finds the search bar and clicks it
+3. Executor types "Gemini"
+4. Executor presses Enter
+5. Search results appear
+6. Task completes
 
-**Проверь:**
-- ✅ В логах executor: `Executing: {'type': 'open_url', ...}`
-- ✅ Затем: `Executing: {'type': 'type', 'text': 'Gemini', ...}`
-- ✅ Затем: `Executing: {'type': 'key_combo', 'keys': ['return']}`
-- ✅ На экране: результаты поиска "Gemini"
-- ✅ В dashboard: статус → `completed`
+**Verify:**
+- Executor logs: `Executing: {'type': 'open_url', ...}`
+- Then: `Executing: {'type': 'type', 'text': 'Gemini', ...}`
+- Then: `Executing: {'type': 'key_combo', 'keys': ['return']}`
+- On screen: "Gemini" search results
+- Dashboard: status → `completed`
 
-**Если executor не попадает по поисковой строке:**
-- Проверь логи: возможно используется fallback метод (Tab навигация)
-- Это нормально, если в итоге поиск выполнен
-
----
-
-### Уровень 4: Сложные задачи (полный сценарий)
-
-#### Тест 4.1: Поиск на YouTube
-
-**Команда:** "Hey Phantom, open YouTube and search for Gemini AI"
-
-**Ожидаемое поведение:**
-1. Executor открывает YouTube
-2. Executor находит поисковую строку
-3. Executor вводит "Gemini AI"
-4. Executor нажимает Enter
-5. Появляются результаты поиска
-6. Задача завершается
-
-**Проверь:**
-- ✅ Все шаги выполнены последовательно
-- ✅ Результаты поиска видны на экране
-- ✅ В dashboard: статус → `completed`
-
-#### Тест 4.2: Многошаговая задача
-
-**Команда:** "Hey Phantom, open Safari, then open Google, then search for Phantom Dev"
-
-**Ожидаемое поведение:**
-1. Executor открывает Safari
-2. Executor открывает Google в Safari
-3. Executor выполняет поиск "Phantom Dev"
-4. Задача завершается
-
-**Проверь:**
-- ✅ Все шаги выполнены
-- ✅ В dashboard: статус → `completed`
+**If the executor misses the search bar:**
+- Check logs: a fallback method (Tab navigation) may be used
+- This is acceptable if the search completes successfully
 
 ---
 
-## 🔍 Как проверять логи во время теста
+### Level 4: Complex Tasks (Full Scenario)
 
-### В реальном времени (stream)
+#### Test 4.1: YouTube Search
+
+**Command:** "Hey Phantom, open YouTube and search for Gemini AI"
+
+**Expected behavior:**
+1. Executor opens YouTube
+2. Executor finds the search bar
+3. Executor types "Gemini AI"
+4. Executor presses Enter
+5. Search results appear
+6. Task completes
+
+**Verify:**
+- All steps completed in order
+- Search results visible on screen
+- Dashboard: status → `completed`
+
+#### Test 4.2: Multi-Step Task
+
+**Command:** "Hey Phantom, open Safari, then open Google, then search for Phantom Dev"
+
+**Expected behavior:**
+1. Executor opens Safari
+2. Executor opens Google in Safari
+3. Executor searches for "Phantom Dev"
+4. Task completes
+
+**Verify:**
+- All steps completed
+- Dashboard: status → `completed`
+
+---
+
+## How to Check Logs During a Test
+
+### Real-Time (Stream)
 
 **Voice Gateway:**
 ```bash
@@ -212,136 +212,136 @@ gcloud run services logs tail phantom-agent \
 ```
 
 **Executor:**
-- Логи видны прямо в терминале, где запущен executor
+- Logs are visible directly in the terminal where the executor is running
 
 **Dashboard:**
-- Открой DevTools (F12) → Console
-- Все события WebSocket будут в консоли
+- Open DevTools (F12) → Console
+- All WebSocket events will appear in the console
 
 ---
 
-## ❌ Типичные проблемы и решения
+## Common Issues and Solutions
 
-### Проблема 1: Executor не подключается
+### Issue 1: Executor Does Not Connect
 
-**Симптомы:**
-- В dashboard: "No executor connected"
-- В логах executor: ошибка подключения
+**Symptoms:**
+- Dashboard: "No executor connected"
+- Executor logs: connection error
 
-**Решение:**
-1. Проверь, что executor запущен
-2. Проверь `.env` в `executor/`:
+**Solution:**
+1. Verify the executor is running
+2. Check `.env` in `executor/`:
    - `AGENT_WS_URL=wss://phantom-agent-874381233509.us-central1.run.app/ws/executor`
-3. Проверь, что есть Application Default Credentials:
+3. Verify Application Default Credentials exist:
    ```bash
    gcloud auth application-default login --project=phantom-dev-489603
    ```
 
-### Проблема 2: Voice Gateway возвращает 429
+### Issue 2: Voice Gateway Returns 429
 
-**Симптомы:**
-- В логах voice gateway: `429 RESOURCE_EXHAUSTED`
-- В консоли браузера: ошибка при отправке голосовой команды
+**Symptoms:**
+- Voice gateway logs: `429 RESOURCE_EXHAUSTED`
+- Browser console: error when sending voice command
 
-**Решение:**
-1. Проверь, что voice gateway использует Vertex AI:
+**Solution:**
+1. Verify voice gateway is using Vertex AI:
    ```bash
    gcloud run services logs read phantom-voice \
      --region=us-central1 \
      --project=phantom-dev-489603 \
      --limit=20 | grep "Vertex AI"
    ```
-2. Должно быть: `[/stt-task] Using Vertex AI — project=phantom-dev-489603`
-3. Если нет — передеплой voice gateway (см. `DEPLOY_VERTEX_AI.md`)
+2. Should show: `[/stt-task] Using Vertex AI — project=phantom-dev-489603`
+3. If not — redeploy the voice gateway (see `DEPLOY_VERTEX_AI.md`)
 
-### Проблема 3: Executor не выполняет действия
+### Issue 3: Executor Does Not Perform Actions
 
-**Симптомы:**
-- Executor получает задачу, но ничего не происходит на экране
-- В логах executor: `Executing: ...` но действий нет
+**Symptoms:**
+- Executor receives the task but nothing happens on screen
+- Executor logs show `Executing: ...` but no actions occur
 
-**Решение:**
-1. Проверь macOS разрешения:
+**Solution:**
+1. Check macOS permissions:
    - System Settings → Privacy & Security → Accessibility
-   - Должен быть включён Terminal (или Python)
-2. Проверь Input Monitoring:
+   - Terminal (or Python) must be enabled
+2. Check Input Monitoring:
    - System Settings → Privacy & Security → Input Monitoring
-   - Должен быть включён Terminal (или Python)
-3. Перезапусти executor после включения разрешений
+   - Terminal (or Python) must be enabled
+3. Restart the executor after enabling permissions
 
-### Проблема 4: Executor не попадает по поисковой строке
+### Issue 4: Executor Misses the Search Bar
 
-**Симптомы:**
-- Executor пытается кликнуть, но кликает мимо поисковой строки
-- В логах: координаты неверные
+**Symptoms:**
+- Executor attempts to click but misses the search bar
+- Logs show incorrect coordinates
 
-**Решение:**
-1. Это нормально — executor использует fallback метод (Tab навигация)
-2. Если поиск всё равно не выполняется:
-   - Проверь, что браузер в фокусе
-   - Проверь, что поисковая строка видна на экране
-   - Попробуй увеличить экран (не zoom, а разрешение)
+**Solution:**
+1. This is expected — executor uses a fallback method (Tab navigation)
+2. If the search still fails:
+   - Verify the browser is in focus
+   - Verify the search bar is visible on screen
+   - Try increasing screen resolution (not zoom)
 
-### Проблема 5: Задача не завершается
+### Issue 5: Task Does Not Complete
 
-**Симптомы:**
-- Executor выполняет все действия, но задача остаётся в статусе `running`
-- В dashboard: статус не меняется на `completed`
+**Symptoms:**
+- Executor performs all actions but task remains in `running` status
+- Dashboard status does not change to `completed`
 
-**Решение:**
-1. Проверь логи executor: должно быть `Task completed successfully`
-2. Если нет — проверь `VERIFY_PROMPT` в `orchestrator.py`
-3. Возможно, Gemini не распознаёт успешное выполнение
-4. Попробуй более простую задачу для проверки
-
----
-
-## 📊 Чеклист полного теста
-
-### Перед каждым тестом:
-- [ ] Dashboard запущен (`npm run dev`)
-- [ ] Executor запущен (`python3 phantom.py`)
-- [ ] В dashboard: "1 executor connected"
-- [ ] В dashboard: WebSocket connected
-
-### После каждого теста:
-- [ ] Задача появилась в dashboard
-- [ ] Статус задачи изменился на `completed` (или `failed` с понятной ошибкой)
-- [ ] В логах executor: `Task completed successfully`
-- [ ] На экране: визуально задача выполнена
+**Solution:**
+1. Check executor logs: should show `Task completed successfully`
+2. If not — check `VERIFY_PROMPT` in `orchestrator.py`
+3. Gemini may not be recognizing successful completion
+4. Try a simpler task to verify
 
 ---
 
-## 🎬 Полный end-to-end тест
+## Full Test Checklist
 
-### Сценарий: "Открыть Google и найти Gemini"
+### Before Each Test:
+- [ ] Dashboard is running (`npm run dev`)
+- [ ] Executor is running (`python3 phantom.py`)
+- [ ] Dashboard shows "1 executor connected"
+- [ ] Dashboard shows WebSocket connected
 
-1. **Запусти все компоненты:**
+### After Each Test:
+- [ ] Task appeared in dashboard
+- [ ] Task status changed to `completed` (or `failed` with a clear error message)
+- [ ] Executor logs show `Task completed successfully`
+- [ ] Task is visually completed on screen
+
+---
+
+## Full End-to-End Test
+
+### Scenario: "Open Google and Search for Gemini"
+
+1. **Start all components:**
    - Dashboard: `npm run dev`
    - Executor: `python3 phantom.py`
 
-2. **Проверь подключения:**
-   - Dashboard: WebSocket connected ✅
-   - Dashboard: 1 executor connected ✅
+2. **Verify connections:**
+   - Dashboard: WebSocket connected
+   - Dashboard: 1 executor connected
 
-3. **Выполни голосовую команду:**
-   - Открой `http://localhost:3000/voice-test.html`
-   - Скажи: "Hey Phantom, open Google and search for Gemini"
+3. **Execute the voice command:**
+   - Open `http://localhost:3000/voice-test.html`
+   - Say: "Hey Phantom, open Google and search for Gemini"
 
-4. **Наблюдай:**
-   - В dashboard: задача появилась → статус `queued` → `running`
-   - На экране: Google открывается → поисковая строка → ввод "Gemini" → Enter
-   - В dashboard: статус → `completed`
+4. **Watch:**
+   - Dashboard: task appears → status `queued` → `running`
+   - On screen: Google opens → search bar → type "Gemini" → Enter
+   - Dashboard: status → `completed`
 
-5. **Проверь результат:**
-   - На экране: результаты поиска "Gemini" видны
-   - В dashboard: задача завершена успешно
-   - В логах executor: `Task completed successfully`
+5. **Verify the result:**
+   - "Gemini" search results visible on screen
+   - Dashboard: task completed successfully
+   - Executor logs: `Task completed successfully`
 
 ---
 
-## 🚀 Готово!
+## Done
 
-Теперь ты знаешь, как тестировать все компоненты Phantom Dev. Начни с **Уровня 1** и постепенно переходи к более сложным тестам.
+Now you know how to test all components of Phantom Dev. Start with **Level 1** and gradually move to more complex tests.
 
-**Совет:** Если что-то не работает, сначала проверь логи (см. `CHECK_LOGS.md`), затем разрешения macOS, затем подключения между компонентами.
+**Tip:** If something is not working, check logs first (see `CHECK_LOGS.md`), then macOS permissions, then connections between components.

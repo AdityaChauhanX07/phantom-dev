@@ -1,73 +1,73 @@
-# Пошаговая инструкция: Деплой с Vertex AI
+# Step-by-Step Guide: Deploy with Vertex AI
 
-## Шаг 1: Обновить executor/.env
+## Step 1: Update executor/.env
 
-Executor уже поддерживает Vertex AI! Нужно добавить GCP_PROJECT_ID.
+The executor already supports Vertex AI. You need to add GCP_PROJECT_ID.
 
-**Отредактируй `executor/.env`:**
+**Edit `executor/.env`:**
 
 ```bash
-# Вариант 1: Использовать Vertex AI (рекомендуется, нет rate limit)
+# Option 1: Use Vertex AI (recommended, no rate limit)
 GCP_PROJECT_ID=phantom-dev-489603
 GCP_LOCATION=us-central1
 AGENT_WS_URL=wss://phantom-agent-874381233509.us-central1.run.app/ws/executor
 PHANTOM_MODE=cloud
 
-# Вариант 2: Использовать API key (fallback, есть rate limit)
-# GEMINI_API_KEY=твой_ключ
+# Option 2: Use API key (fallback, has rate limit)
+# GEMINI_API_KEY=your_key
 # AGENT_WS_URL=wss://phantom-agent-874381233509.us-central1.run.app/ws/executor
 # PHANTOM_MODE=cloud
 ```
 
-**Важно:** 
-- Если есть `GCP_PROJECT_ID` — executor использует Vertex AI (нет rate limit)
-- Если нет `GCP_PROJECT_ID`, но есть `GEMINI_API_KEY` — использует AI Studio (есть rate limit)
-- Можно оставить оба, но приоритет у `GCP_PROJECT_ID`
+**Important:**
+- If `GCP_PROJECT_ID` is set — executor uses Vertex AI (no rate limit)
+- If `GCP_PROJECT_ID` is not set but `GEMINI_API_KEY` is — uses AI Studio (has rate limit)
+- Both can be set simultaneously, but `GCP_PROJECT_ID` takes priority
 
 ---
 
-## Шаг 2: Проверить dashboard/.env.local
+## Step 2: Check dashboard/.env.local
 
-Dashboard НЕ использует Gemini напрямую, только WebSocket для связи с agent.
+Dashboard does NOT use Gemini directly — it only uses WebSocket to communicate with the agent.
 
-**Проверь `dashboard/.env.local`:**
+**Check `dashboard/.env.local`:**
 
 ```bash
 NEXT_PUBLIC_AGENT_WS_URL=wss://phantom-agent-874381233509.us-central1.run.app/ws/dashboard
 ```
 
-**Ничего менять не нужно!** Dashboard только получает события от agent через WebSocket.
+**No changes needed!** Dashboard only receives events from the agent via WebSocket.
 
 ---
 
-## Шаг 3: Задеплоить voice gateway
+## Step 3: Deploy the Voice Gateway
 
-Voice gateway теперь использует Vertex AI для `/stt-task`.
+The voice gateway now uses Vertex AI for `/stt-task`.
 
-**Запусти:**
+**Run:**
 
 ```bash
 ./deploy-voice.sh
 ```
 
-Этот скрипт:
-1. Соберёт Docker image
-2. Запушит в Artifact Registry
-3. Задеплоит на Cloud Run с правильными env vars
+This script will:
+1. Build the Docker image
+2. Push it to Artifact Registry
+3. Deploy to Cloud Run with the correct env vars
 
-**Env vars в Cloud Run (устанавливаются автоматически):**
-- `GCP_PROJECT_ID=phantom-dev-489603` ✅
-- `GCP_LOCATION=us-central1` ✅
-- `GEMINI_API_KEY=...` (для Live API fallback, если нужно)
+**Env vars in Cloud Run (set automatically):**
+- `GCP_PROJECT_ID=phantom-dev-489603`
+- `GCP_LOCATION=us-central1`
+- `GEMINI_API_KEY=...` (for Live API fallback, if needed)
 - `AGENT_URL=...`
 - `TEXT_MODEL=gemini-2.5-flash`
 - `LIVE_MODEL=gemini-2.5-flash-native-audio-preview-12-2025`
 
 ---
 
-## Шаг 4: Проверить деплой
+## Step 4: Verify the Deployment
 
-**Проверь логи voice gateway:**
+**Check voice gateway logs:**
 
 ```bash
 gcloud run services logs read phantom-voice \
@@ -76,123 +76,123 @@ gcloud run services logs read phantom-voice \
   --limit=20
 ```
 
-**Ищи в логах:**
-- `[/stt-task] Using Vertex AI — project=phantom-dev-489603 location=us-central1` ✅
-- Больше НЕ должно быть ошибок `429 RESOURCE_EXHAUSTED` ✅
+**Look for in logs:**
+- `[/stt-task] Using Vertex AI — project=phantom-dev-489603 location=us-central1`
+- No more `429 RESOURCE_EXHAUSTED` errors
 
 ---
 
-## Шаг 5: Протестировать
+## Step 5: Test
 
-### 5.1. Запустить dashboard (если ещё не запущен)
+### 5.1. Start the Dashboard (if not already running)
 
 ```bash
 cd dashboard
 npm run dev
 ```
 
-Открой: `http://localhost:3000`
+Open: `http://localhost:3000`
 
-### 5.2. Запустить executor
+### 5.2. Start the Executor
 
 ```bash
 cd executor
 PHANTOM_MODE=cloud python3 phantom.py
 ```
 
-**Проверь логи executor:**
-- Должно быть: `GeminiClient initialised with Vertex AI — project=phantom-dev-489603`
-- НЕ должно быть: `GeminiClient falling back to AI Studio key`
+**Check executor logs:**
+- Should show: `GeminiClient initialised with Vertex AI — project=phantom-dev-489603`
+- Should NOT show: `GeminiClient falling back to AI Studio key`
 
-### 5.3. Протестировать голосовую команду
+### 5.3. Test the Voice Command
 
-1. Открой: `http://localhost:3000/voice-test.html`
-2. Нажми кнопку микрофона
-3. Скажи: "Hey Phantom, test task"
-4. Проверь:
-   - ✅ В логах voice gateway: `Using Vertex AI`
-   - ✅ В dashboard: появилась новая задача
-   - ✅ НЕТ ошибки 429
+1. Open: `http://localhost:3000/voice-test.html`
+2. Click the microphone button
+3. Say: "Hey Phantom, test task"
+4. Verify:
+   - In voice gateway logs: `Using Vertex AI`
+   - In dashboard: a new task appeared
+   - NO 429 errors
 
 ---
 
-## Итоговая схема
+## Architecture Overview
 
 ```
-┌─────────────────┐
-│  voice-test.html │
-│  (браузер)      │
-└────────┬────────┘
-         │ HTTP POST /stt-task
-         ▼
-┌─────────────────┐
-│  Voice Gateway  │
-│  (Cloud Run)    │
-│  Vertex AI ✅   │
-└────────┬────────┘
-         │ POST /task
-         ▼
-┌─────────────────┐
-│  Agent          │
-│  (Cloud Run)    │
-└────────┬────────┘
-         │ WebSocket
-         ├──────────────┐
-         ▼              ▼
-┌─────────────┐  ┌─────────────┐
-│  Executor   │  │  Dashboard  │
-│  Vertex AI ✅│  │  (локально) │
-│  (локально) │  │             │
-└─────────────┘  └─────────────┘
++------------------+
+|  voice-test.html |
+|  (browser)       |
++--------+---------+
+         | HTTP POST /stt-task
+         v
++------------------+
+|  Voice Gateway   |
+|  (Cloud Run)     |
+|  Vertex AI       |
++--------+---------+
+         | POST /task
+         v
++------------------+
+|  Agent           |
+|  (Cloud Run)     |
++--------+---------+
+         | WebSocket
+         +------------------+
+         v                  v
++-------------+    +-------------+
+|  Executor   |    |  Dashboard  |
+|  Vertex AI  |    |  (local)    |
+|  (local)    |    |             |
++-------------+    +-------------+
 ```
 
-**Все используют Vertex AI:**
-- ✅ Voice Gateway `/stt-task` → Vertex AI
-- ✅ Executor → Vertex AI
+**All components use Vertex AI:**
+- Voice Gateway `/stt-task` → Vertex AI
+- Executor → Vertex AI
 
-**НЕ используют Gemini:**
-- ✅ Dashboard (только WebSocket для событий)
+**Does NOT use Gemini:**
+- Dashboard (WebSocket events only)
 
 ---
 
 ## Troubleshooting
 
-### Executor всё ещё использует API key
+### Executor still uses API key
 
-**Проблема:** В логах видно `GeminiClient falling back to AI Studio key`
+**Problem:** Logs show `GeminiClient falling back to AI Studio key`
 
-**Решение:** Проверь `executor/.env`:
+**Solution:** Check `executor/.env`:
 ```bash
-GCP_PROJECT_ID=phantom-dev-489603  # Должно быть!
+GCP_PROJECT_ID=phantom-dev-489603  # Must be present!
 GCP_LOCATION=us-central1
 ```
 
-### Voice gateway всё ещё 429
+### Voice gateway still returns 429
 
-**Проблема:** Всё ещё ошибки 429
+**Problem:** Still getting 429 errors
 
-**Решение:** 
-1. Проверь логи: должно быть `Using Vertex AI`
-2. Если нет — перезадеплой: `./deploy-voice.sh`
-3. Проверь, что Vertex AI API включен: `gcloud services list --enabled --project=phantom-dev-489603 | grep aiplatform`
+**Solution:**
+1. Check logs: should show `Using Vertex AI`
+2. If not — redeploy: `./deploy-voice.sh`
+3. Verify Vertex AI API is enabled: `gcloud services list --enabled --project=phantom-dev-489603 | grep aiplatform`
 
-### Dashboard не подключается
+### Dashboard not connecting
 
-**Проблема:** Dashboard показывает "Disconnected"
+**Problem:** Dashboard shows "Disconnected"
 
-**Решение:** Проверь `dashboard/.env.local`:
+**Solution:** Check `dashboard/.env.local`:
 ```bash
 NEXT_PUBLIC_AGENT_WS_URL=wss://phantom-agent-874381233509.us-central1.run.app/ws/dashboard
 ```
 
 ---
 
-## Готово! 🚀
+## Done
 
-После выполнения всех шагов:
-- ✅ Voice gateway использует Vertex AI (нет rate limit)
-- ✅ Executor использует Vertex AI (нет rate limit)
-- ✅ Dashboard подключён к agent
-- ✅ Можно тестировать голосовые команды
+After completing all steps:
+- Voice gateway uses Vertex AI (no rate limit)
+- Executor uses Vertex AI (no rate limit)
+- Dashboard is connected to agent
+- Voice commands are ready for testing
 
-**Начинай с Шага 1!**
+**Start with Step 1!**

@@ -188,10 +188,10 @@ Post a few messages to make channel look active:
 4. Note any issues and fix them
 
 **Practice until:**
-- ✅ No unexpected dialogs/popups
-- ✅ All apps load quickly
-- ✅ Voice command is recognized correctly
-- ✅ Executor completes task without errors
+- No unexpected dialogs/popups
+- All apps load quickly
+- Voice command is recognized correctly
+- Executor completes task without errors
 
 ---
 
@@ -226,7 +226,7 @@ Keep backup screenshots of each app's expected state for quick reset.
 ## Next Steps
 
 After setup is complete:
-1. ✅ Test voice → task → dashboard flow (already done)
-2. ⏳ Wait for executor to be connected
-3. ⏳ Full integration testing (Day 6)
-4. ⏳ Record demo video (Day 7-8)
+1. Test voice → task → dashboard flow (already done)
+2. Wait for executor to be connected
+3. Full integration testing (Day 6)
+4. Record demo video (Day 7-8)

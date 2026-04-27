@@ -1,233 +1,233 @@
-# Как подключить всё и протестировать демо
+# How to Connect Everything and Test the Demo
 
-## Текущая ситуация
+## Current Status
 
-✅ **Что уже работает:**
-- Голос → распознавание → задача создаётся → dashboard показывает задачу
-- Jira, Sheets, Slack аккаунты созданы
+**What is already working:**
+- Voice recognition → task creation → dashboard displays the task
+- Jira, Sheets, Slack accounts created
 
-⏳ **Что нужно дождаться:**
-- Executor от напарника (он будет делать реальные действия на экране)
+**Pending:**
+- Executor from your partner (will perform real on-screen actions)
 
 ---
 
-## Шаг 1: Проверка, что всё залогинено
+## Step 1: Verify All Accounts Are Logged In
 
 ### 1.1 Jira
-1. Открой Jira в браузере
-2. Убедись, что залогинен (не просит пароль)
-3. Открой проект "Phantom Demo"
-4. Проверь, что видишь 10 тикетов (5 с Q1, 5 с Q2)
-5. **Закладка:** Сохрани URL проекта в закладки
+1. Open Jira in the browser
+2. Confirm you are logged in (no password prompt)
+3. Open the "Phantom Demo" project
+4. Verify you can see 10 tickets (5 tagged Q1, 5 tagged Q2)
+5. **Bookmark:** Save the project URL
 
 ### 1.2 Google Sheets
-1. Открой Google Sheets
-2. Убедись, что залогинен
-3. Открой таблицу "Bug Tracker"
-4. Проверь, что есть заголовки (Ticket ID, Title, Status, Priority, Date Added)
-5. Проверь, что есть 3 строки с данными
-6. **Закладка:** Сохрани URL таблицы в закладки
+1. Open Google Sheets
+2. Confirm you are logged in
+3. Open the "Bug Tracker" spreadsheet
+4. Verify headers are present (Ticket ID, Title, Status, Priority, Date Added)
+5. Verify there are 3 rows of data
+6. **Bookmark:** Save the spreadsheet URL
 
 ### 1.3 Slack
-1. Открой Slack в браузере
-2. Убедись, что залогинен в workspace "Phantom Demo Workspace"
-3. Открой канал #bug-reports
-4. Проверь, что есть несколько сообщений
-5. **Закладка:** Сохрани URL канала в закладки
+1. Open Slack in the browser
+2. Confirm you are logged in to the "Phantom Demo Workspace"
+3. Open the #bug-reports channel
+4. Verify there are several messages
+5. **Bookmark:** Save the channel URL
 
 ---
 
-## Шаг 2: Подготовка браузера для демо
+## Step 2: Prepare the Browser for Demo
 
-### 2.1 Создай отдельный Chrome профиль (рекомендуется)
+### 2.1 Create a Separate Chrome Profile (Recommended)
 
-1. Открой Chrome
-2. Нажми на иконку профиля (справа вверху)
-3. Нажми "Add" → "Create new profile"
-4. Назови его "Phantom Demo"
-5. В этом профиле:
-   - Залогинься в Jira
-   - Залогинься в Google Sheets
-   - Залогинься в Slack
-   - Открой все 3 вкладки (Jira, Sheets, Slack)
-   - Закрепи Chrome в Dock
+1. Open Chrome
+2. Click the profile icon (top right)
+3. Click "Add" → "Create new profile"
+4. Name it "Phantom Demo"
+5. In this profile:
+   - Log in to Jira
+   - Log in to Google Sheets
+   - Log in to Slack
+   - Open all 3 tabs (Jira, Sheets, Slack)
+   - Pin Chrome to the Dock
 
-### 2.2 Или используй текущий профиль
+### 2.2 Or Use Your Current Profile
 
-Если не хочешь создавать новый профиль:
-1. Открой 3 вкладки в Chrome:
-   - Вкладка 1: Jira проект
-   - Вкладка 2: Google Sheets "Bug Tracker"
-   - Вкладка 3: Slack #bug-reports
-2. Закрепи Chrome в Dock
-
----
-
-## Шаг 3: Тестирование голосовых команд (сейчас)
-
-**Пока executor не подключен, можно протестировать голосовой flow:**
-
-### Тест 1: Простая команда
-1. Открой `http://localhost:3000/voice-test.html`
-2. Скажи: **"Hey Phantom, take Q1 tickets from Jira and add them to the tracking sheet"**
-3. Проверь:
-   - В логе появилось: `HTTP TASK DETECTED: ...`
-   - В dashboard появилась задача
-
-### Тест 2: Полная команда (как в демо)
-1. Скажи: **"Hey Phantom, take the top 5 bugs from Jira tagged Q1, add them to our tracking spreadsheet in Google Sheets, and post a summary in Slack"**
-2. Проверь, что задача создана с правильным goal
-
-**Важно:** Сейчас executor не подключен, поэтому задача будет в статусе `queued` и не выполнится. Это нормально.
+If you do not want to create a new profile:
+1. Open 3 tabs in Chrome:
+   - Tab 1: Jira project
+   - Tab 2: Google Sheets "Bug Tracker"
+   - Tab 3: Slack #bug-reports
+2. Pin Chrome to the Dock
 
 ---
 
-## Шаг 4: Что будет, когда executor подключится
+## Step 3: Testing Voice Commands (Now)
 
-### Когда напарник подключит executor:
+**While the executor is not connected, you can test the voice flow:**
 
-1. **Executor подключится к:** `wss://phantom-agent-874381233509.us-central1.run.app/ws/executor`
+### Test 1: Simple Command
+1. Open `http://localhost:3000/voice-test.html`
+2. Say: **"Hey Phantom, take Q1 tickets from Jira and add them to the tracking sheet"**
+3. Verify:
+   - The log shows: `HTTP TASK DETECTED: ...`
+   - A task appears in the dashboard
 
-2. **Когда ты скажешь голосовую команду:**
-   - Задача создаётся (как сейчас)
-   - Executor получает задачу через WebSocket
-   - Executor начинает делать действия на экране:
-     - Открывает Jira
-     - Находит тикеты с тегом Q1
-     - Копирует данные
-     - Переключается на Google Sheets
-     - Вставляет данные в таблицу
-     - Переключается на Slack
-     - Пишет сообщение в #bug-reports
-   - Executor отправляет результаты обратно
-   - Dashboard показывает статус `running` → `completed`
+### Test 2: Full Command (as in the demo)
+1. Say: **"Hey Phantom, take the top 5 bugs from Jira tagged Q1, add them to our tracking spreadsheet in Google Sheets, and post a summary in Slack"**
+2. Verify that the task is created with the correct goal
 
-3. **Ты увидишь:**
-   - В dashboard: статус задачи меняется с `queued` на `running`, потом на `completed`
-   - На экране: реальные действия (клики, ввод текста, переключение между приложениями)
-   - В Activity Feed: события `screenshot`, `task_result`
+**Note:** The executor is not connected yet, so the task will remain in `queued` status and will not be executed. This is expected.
 
 ---
 
-## Шаг 5: Подготовка к полному тесту
+## Step 4: What Happens When the Executor Connects
 
-### Когда executor будет готов, нужно:
+### When your partner connects the executor:
 
-1. **Убедиться, что все аккаунты залогинены:**
-   - Jira: открыть проект, проверить тикеты
-   - Sheets: открыть таблицу, проверить заголовки
-   - Slack: открыть канал #bug-reports
+1. **Executor will connect to:** `wss://phantom-agent-874381233509.us-central1.run.app/ws/executor`
 
-2. **Закрыть все лишние окна/вкладки:**
-   - Оставить только 3 вкладки (Jira, Sheets, Slack)
-   - Закрыть все остальные приложения
+2. **When you say a voice command:**
+   - Task is created (as now)
+   - Executor receives the task via WebSocket
+   - Executor starts performing on-screen actions:
+     - Opens Jira
+     - Finds tickets tagged Q1
+     - Copies the data
+     - Switches to Google Sheets
+     - Inserts data into the spreadsheet
+     - Switches to Slack
+     - Posts a message in #bug-reports
+   - Executor sends results back
+   - Dashboard shows status `running` → `completed`
 
-3. **Отключить уведомления:**
-   - macOS: System Settings → Notifications → включить Do Not Disturb
-   - Или отключить все уведомления
+3. **You will see:**
+   - In dashboard: task status changes from `queued` to `running`, then to `completed`
+   - On screen: real actions (clicks, text input, switching between apps)
+   - In Activity Feed: `screenshot` and `task_result` events
 
-4. **Запустить dashboard:**
+---
+
+## Step 5: Preparing for the Full Test
+
+### When the executor is ready:
+
+1. **Verify all accounts are logged in:**
+   - Jira: open the project, check tickets
+   - Sheets: open the spreadsheet, check headers
+   - Slack: open the #bug-reports channel
+
+2. **Close all unnecessary windows/tabs:**
+   - Keep only 3 tabs (Jira, Sheets, Slack)
+   - Close all other apps
+
+3. **Disable notifications:**
+   - macOS: System Settings → Notifications → enable Do Not Disturb
+   - Or disable all notifications
+
+4. **Start the dashboard:**
    ```bash
    cd dashboard
    npm run dev
    ```
 
-5. **Открыть в браузере:**
+5. **Open in browser:**
    - Dashboard: `http://localhost:3000`
    - Voice Test: `http://localhost:3000/voice-test.html`
 
-6. **Проверить, что executor подключен:**
-   - В dashboard должно быть: **"1 executor connected"** (зелёный статус)
-   - Если видишь "No executor" — executor ещё не подключен
+6. **Verify the executor is connected:**
+   - Dashboard should show: **"1 executor connected"** (green status)
+   - If you see "No executor" — executor is not connected yet
 
 ---
 
-## Шаг 6: Полный тест (когда executor готов)
+## Step 6: Full Test (When Executor is Ready)
 
-### Сценарий теста:
+### Test scenario:
 
-1. **Скажи голосовую команду:**
+1. **Say the voice command:**
    "Hey Phantom, take the top 5 bugs from Jira tagged Q1, add them to our tracking spreadsheet in Google Sheets, and post a summary in Slack"
 
-2. **Наблюдай:**
-   - Dashboard: задача появляется, статус меняется на `running`
-   - На экране: executor открывает Jira, ищет тикеты, копирует данные
-   - Executor переключается на Sheets, вставляет данные
-   - Executor переключается на Slack, пишет сообщение
-   - Dashboard: статус меняется на `completed`
+2. **Watch:**
+   - Dashboard: task appears, status changes to `running`
+   - On screen: executor opens Jira, searches for tickets, copies data
+   - Executor switches to Sheets, inserts data
+   - Executor switches to Slack, posts a message
+   - Dashboard: status changes to `completed`
 
-3. **Проверь результат:**
-   - В Google Sheets появились новые строки с данными из Jira
-   - В Slack #bug-reports появилось сообщение с summary
+3. **Verify the result:**
+   - New rows with Jira data appear in Google Sheets
+   - A summary message appears in Slack #bug-reports
 
 ---
 
-## Что делать прямо сейчас
+## What to Do Right Now
 
-### Сейчас (executor ещё не подключен):
+### Now (executor not yet connected):
 
-1. ✅ **Проверь, что все аккаунты залогинены:**
-   - Открой Jira → проверь тикеты
-   - Открой Sheets → проверь таблицу
-   - Открой Slack → проверь канал
+1. **Verify all accounts are logged in:**
+   - Open Jira → check tickets
+   - Open Sheets → check spreadsheet
+   - Open Slack → check channel
 
-2. ✅ **Протестируй голосовые команды:**
-   - Скажи несколько команд
-   - Убедись, что задачи создаются
-   - Проверь, что goal распознаётся правильно
+2. **Test voice commands:**
+   - Say a few commands
+   - Confirm tasks are being created
+   - Verify the goal is recognized correctly
 
-3. ✅ **Подготовь браузер:**
-   - Открой все 3 вкладки (Jira, Sheets, Slack)
-   - Закрепи Chrome в Dock
-   - Закрой все лишние окна
+3. **Prepare the browser:**
+   - Open all 3 tabs (Jira, Sheets, Slack)
+   - Pin Chrome to the Dock
+   - Close all unnecessary windows
 
-4. ⏳ **Дождись executor от напарника**
+4. **Wait for the executor from your partner**
 
-### Когда executor будет готов:
+### When the executor is ready:
 
-1. Проверь, что executor подключен (в dashboard должно быть "1 executor connected")
-2. Запусти полный тест (см. Шаг 6 выше)
-3. Если что-то не работает — проверь логи Cloud Run
+1. Verify the executor is connected (dashboard should show "1 executor connected")
+2. Run the full test (see Step 6 above)
+3. If something is not working — check Cloud Run logs
 
 ---
 
 ## Troubleshooting
 
-### Задача создаётся, но executor не выполняет
+### Task is created but executor does not execute
 
-**Причина:** Executor не подключен или не получил задачу
+**Cause:** Executor is not connected or did not receive the task
 
-**Решение:**
-- Проверь в dashboard: есть ли "1 executor connected"?
-- Если нет — напарник ещё не подключил executor
-- Если да — проверь логи Cloud Run
+**Solution:**
+- Check the dashboard: is "1 executor connected" shown?
+- If not — your partner has not connected the executor yet
+- If yes — check Cloud Run logs
 
-### Executor выполняет, но данные не появляются
+### Executor executes but data does not appear
 
-**Причина:** Executor не может найти элементы на экране
+**Cause:** Executor cannot find elements on screen
 
-**Решение:**
-- Убедись, что все вкладки открыты и видны
-- Проверь, что тикеты в Jira имеют правильные теги (Q1, Q2)
-- Проверь, что таблица в Sheets имеет правильные заголовки
+**Solution:**
+- Make sure all tabs are open and visible
+- Verify that Jira tickets have the correct labels (Q1, Q2)
+- Verify that the Sheets table has the correct headers
 
-### Голосовая команда не распознаётся
+### Voice command is not recognized
 
-**Причина:** Фраза слишком сложная или нечёткая
+**Cause:** Phrase is too complex or unclear
 
-**Решение:**
-- Говори чётко и медленно
-- Используй фразу: "Hey Phantom, take the top 5 bugs from Jira tagged Q1, add them to our tracking spreadsheet in Google Sheets, and post a summary in Slack"
-- Если не работает — упрости: "Hey Phantom, move Q1 tickets to sheet"
+**Solution:**
+- Speak clearly and slowly
+- Use the phrase: "Hey Phantom, take the top 5 bugs from Jira tagged Q1, add them to our tracking spreadsheet in Google Sheets, and post a summary in Slack"
+- If it still does not work — simplify: "Hey Phantom, move Q1 tickets to sheet"
 
 ---
 
-## Следующие шаги
+## Next Steps
 
-1. ✅ Проверь все аккаунты (Jira, Sheets, Slack)
-2. ✅ Протестируй голосовые команды
-3. ⏳ Дождись executor от напарника
-4. ⏳ Запусти полный e2e тест
-5. ⏳ Запиши демо-видео
+1. Check all accounts (Jira, Sheets, Slack)
+2. Test voice commands
+3. Wait for the executor from your partner
+4. Run the full end-to-end test
+5. Record the demo video
 
-**Готов к тестированию?** Скажи, когда напарник подключит executor, и мы запустим полный тест!
+**Ready to test?** Let us know when your partner connects the executor and we will run the full test.
