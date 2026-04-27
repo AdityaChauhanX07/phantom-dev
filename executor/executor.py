@@ -101,14 +101,20 @@ def _handle_type(action: dict) -> dict:
         x, y = action["x"], action["y"]
         logger.info("Clicking on input field at (%d, %d) before typing...", x, y)
         pyautogui.click(x, y)
-        time.sleep(0.1)  # Brief pause for field to focus
-        # Select all existing text (Cmd+A) before typing new text
-        pyautogui.hotkey("ctrl", "a")
-        time.sleep(0.05)
+        time.sleep(0.3)
 
-    # typewrite is ASCII-safe; use pyperclip+paste for unicode if needed
-    interval = action.get("interval", 0.05)
-    pyautogui.typewrite(text, interval=interval)
+    # Use clipboard paste — fast and handles all characters
+    import pyperclip
+    pyperclip.copy(text)
+    pyautogui.hotkey("ctrl", "v")
+    time.sleep(0.2)
+
+    # Auto-press Tab to confirm the input and move to next cell
+    # This is critical for Google Sheets where paste alone doesn't commit
+    if action.get("auto_tab", False):
+        pyautogui.press("tab")
+        time.sleep(0.1)
+
     return {"text": text, "x": action.get("x"), "y": action.get("y")}
 
 
@@ -205,30 +211,21 @@ def _handle_open_app(action: dict) -> dict:
 
 def _handle_open_url(action: dict) -> dict:
     """
-    Open a URL in Firefox as a new tab in existing window.
-    This keeps user sessions active (logged in to Jira, Sheets, Slack).
-    
-    Args:
-        action: {"type": "open_url", "url": "https://youtube.com"}
-               or {"type": "open_url", "url": "youtube.com"} (https:// will be added)
-    
-    Returns:
-        {"url": str, "success": bool}
+    Open a URL in the default browser using webbrowser.open().
+    This reliably brings Chrome to foreground and opens the URL.
     """
     url = action.get("url", "")
     if not url:
         raise ValueError("'url' is required for 'open_url' action")
-    
-    # Add https:// if not present
+
     if not url.startswith(("http://", "https://")):
         url = "https://" + url
 
-    logger.info("Opening URL in Firefox: %s", url)
+    logger.info("Opening URL in browser: %s", url)
     try:
-        # Open URL in existing Firefox window as new tab — keeps user logged in
         import webbrowser
         webbrowser.open(url)
-        time.sleep(3.0)
+        time.sleep(5.0)
         return {"url": url, "success": True}
     except Exception as exc:
         logger.error("Error opening URL %s: %s", url, exc)
